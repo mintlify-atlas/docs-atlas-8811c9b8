@@ -1,0 +1,111 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "OnlyOffice Control",
+  "projectDescription": "ASP.NET Web Forms control for integrating OnlyOffice Document Server with document editing, viewing, and PDF conversion capabilities.",
+  "theme": "palm",
+  "primaryColor": "#FF6F3D",
+  "lightColor": "#FFB800",
+  "darkColor": "#D9461C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/configuration",
+              "concepts/jwt-authentication",
+              "concepts/document-types",
+              "concepts/callback-handling"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/basic-usage",
+              "guides/document-upload",
+              "guides/pdf-conversion",
+              "guides/advanced-configuration",
+              "guides/troubleshooting"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/simple-editor",
+              "examples/view-mode",
+              "examples/pdf-export",
+              "examples/custom-styling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "User Control",
+            "pages": [
+              "api/user-control/overview",
+              "api/user-control/properties",
+              "api/user-control/methods",
+              "api/user-control/events"
+            ]
+          },
+          {
+            "group": "JavaScript API",
+            "pages": [
+              "api/javascript/overview",
+              "api/javascript/module-methods",
+              "api/javascript/configuration"
+            ]
+          },
+          {
+            "group": "Handlers",
+            "pages": [
+              "api/handlers/overview",
+              "api/handlers/download",
+              "api/handlers/callback",
+              "api/handlers/proxy"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "OnlyOffice Document Server integration",
+    "ASP.NET Web Forms UserControl",
+    "Document editing and viewing",
+    "PDF conversion support",
+    "JWT authentication",
+    "File upload and download handling",
+    "Client-side JavaScript API",
+    "Customizable editor configuration"
+  ],
+  "publicApiSurface": [
+    "OnlyOfficeEditor.SetDocumentFromBytes",
+    "OnlyOfficeEditor.SetDocumentFromFile",
+    "OnlyOfficeEditor.SetDocumentFromUpload",
+    "OnlyOfficeEditor.GetEditedDocumentBytes",
+    "OnlyOfficeEditor.ConvertCurrentDocumentToPdfBytes",
+    "OnlyOfficeEditor.ConvertCurrentDocumentToPdfUrl",
+    "OnlyOfficeEditor.ConvertEditedDocumentToPdfBytes",
+    "OnlyOfficeEditor.ClearEditedDocument",
+    "OnlyOfficeEditorModule.init",
+    "OnlyOfficeEditorModule.getEditedDocumentUrl",
+    "OnlyOfficeEditorModule.getEditedDocumentBlob",
+    "OnlyOfficeEditorModule.captureToHiddenField",
+    "OnlyOfficeEditorModule.destroy",
+    "OnlyOfficeJwt.Create"
+  ]
+}
