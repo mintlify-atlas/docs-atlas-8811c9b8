@@ -1,0 +1,622 @@
+---
+title: 'Configuration'
+description: 'Configuration object structure, events, and customization options for OnlyOfficeEditorModule'
+icon: 'gear'
+---
+
+## Configuration Object Structure
+
+The configuration object passed to `OnlyOfficeEditorModule.init()` follows the OnlyOffice Document Server API specification with additional module-specific handling.
+
+### Basic Structure
+
+```javascript
+var config = {
+    document: {
+        fileType: string,
+        key: string,
+        title: string,
+        url: string,
+        permissions: object    // optional
+    },
+    documentType: string,
+    editorConfig: {
+        mode: string,
+        lang: string,
+        customization: object,
+        user: object,
+        // ... other options
+    },
+    events: object,  // Managed by the module
+    height: string,
+    width: string,
+    type: string
+};
+```
+
+## Document Configuration
+
+Defines the document to be opened in the editor.
+
+<ParamField path="document.fileType" type="string" required>
+  The file extension/type: `'docx'`, `'xlsx'`, `'pptx'`, `'pdf'`, etc.
+  
+  ```javascript
+  fileType: 'docx'
+  ```
+</ParamField>
+
+<ParamField path="document.key" type="string" required>
+  Unique document identifier. Must change when document content changes. Used for caching and collaboration.
+  
+  ```javascript
+  key: 'doc-123-v2'
+  ```
+</ParamField>
+
+<ParamField path="document.title" type="string" required>
+  Document title displayed in the editor.
+  
+  ```javascript
+  title: 'Annual Report 2024.docx'
+  ```
+</ParamField>
+
+<ParamField path="document.url" type="string" required>
+  Absolute URL to the document file. Must be accessible by OnlyOffice Document Server.
+  
+  ```javascript
+  url: 'https://example.com/documents/report.docx'
+  ```
+</ParamField>
+
+<ParamField path="document.permissions" type="object">
+  Document permissions object controlling what users can do.
+  
+  ```javascript
+  permissions: {
+      edit: true,
+      download: true,
+      print: true,
+      review: false,
+      comment: true
+  }
+  ```
+</ParamField>
+
+<Warning>
+The `document.url` must be accessible from the OnlyOffice Document Server, not from the client browser. Ensure proper network configuration and CORS policies.
+</Warning>
+
+### Example: Complete Document Config
+
+```javascript
+document: {
+    fileType: 'xlsx',
+    key: 'spreadsheet-' + documentId + '-v' + version,
+    title: 'Q4 Sales Data.xlsx',
+    url: 'https://cdn.example.com/files/sales-q4.xlsx',
+    permissions: {
+        edit: userCanEdit,
+        download: userCanDownload,
+        print: true,
+        review: userIsReviewer,
+        comment: true,
+        fillForms: true,
+        modifyFilter: userCanEdit,
+        modifyContentControl: userCanEdit
+    },
+    info: {
+        owner: 'John Doe',
+        uploaded: '2024-01-15',
+        folder: 'Sales Reports'
+    }
+}
+```
+
+## Document Type
+
+Specifies the type of editor to use.
+
+<ParamField path="documentType" type="string" required>
+  The editor type: `'word'`, `'cell'`, or `'slide'`.
+  
+  - `'word'`: Document editor (doc, docx, txt, etc.)
+  - `'cell'`: Spreadsheet editor (xls, xlsx, csv, etc.)
+  - `'slide'`: Presentation editor (ppt, pptx, etc.)
+  
+  ```javascript
+  documentType: 'word'
+  ```
+</ParamField>
+
+## Editor Configuration
+
+Controls editor behavior, appearance, and user settings.
+
+### Mode
+
+<ParamField path="editorConfig.mode" type="string">
+  Editor mode: `'edit'` or `'view'`. Defaults to `'edit'`.
+  
+  ```javascript
+  editorConfig: {
+      mode: 'edit'  // or 'view'
+  }
+  ```
+</ParamField>
+
+### Language
+
+<ParamField path="editorConfig.lang" type="string">
+  Interface language code (e.g., `'en'`, `'es'`, `'fr'`).
+  
+  ```javascript
+  editorConfig: {
+      lang: 'en'
+  }
+  ```
+</ParamField>
+
+### User Information
+
+<ParamField path="editorConfig.user" type="object">
+  Information about the current user for collaboration features.
+  
+  ```javascript
+  editorConfig: {
+      user: {
+          id: 'user-123',
+          name: 'Jane Smith',
+          group: 'Sales Team'
+      }
+  }
+  ```
+</ParamField>
+
+### Callback URL
+
+<ParamField path="editorConfig.callbackUrl" type="string">
+  Server endpoint for saving document changes. OnlyOffice Document Server will POST updates to this URL.
+  
+  ```javascript
+  editorConfig: {
+      callbackUrl: 'https://example.com/api/documents/callback'
+  }
+  ```
+</ParamField>
+
+## Customization Options
+
+The `editorConfig.customization` object controls the editor's appearance and behavior. OnlyOfficeEditorModule applies default values automatically.
+
+### Default Customization Values
+
+The module sets these defaults if not specified:
+
+```javascript
+editorConfig: {
+    customization: {
+        uiTheme: 'theme-classic-light',
+        compactToolbar: false,
+        toolbarNoTabs: false,
+        hideRightMenu: true,
+        hideRulers: true,
+        review: {
+            showReviewChanges: false
+        }
+    }
+}
+```
+
+### UI Theme
+
+<ParamField path="editorConfig.customization.uiTheme" type="string" default="theme-classic-light">
+  Color theme for the editor interface.
+  
+  Options:
+  - `'theme-classic-light'`: Light theme (default)
+  - `'theme-light'`: Modern light theme
+  - `'theme-dark'`: Dark theme
+  
+  ```javascript
+  customization: {
+      uiTheme: 'theme-dark'
+  }
+  ```
+</ParamField>
+
+### Toolbar Options
+
+<ParamField path="editorConfig.customization.compactToolbar" type="boolean" default={false}>
+  Use compact toolbar layout.
+  
+  ```javascript
+  customization: {
+      compactToolbar: true
+  }
+  ```
+</ParamField>
+
+<ParamField path="editorConfig.customization.toolbarNoTabs" type="boolean" default={false}>
+  Hide tabs in the toolbar.
+  
+  ```javascript
+  customization: {
+      toolbarNoTabs: true
+  }
+  ```
+</ParamField>
+
+<ParamField path="editorConfig.customization.toolbarHideFileName" type="boolean">
+  Hide the file name in the toolbar.
+  
+  ```javascript
+  customization: {
+      toolbarHideFileName: true
+  }
+  ```
+</ParamField>
+
+### UI Elements Visibility
+
+<ParamField path="editorConfig.customization.hideRightMenu" type="boolean" default={true}>
+  Hide the right sidebar menu. Set to `false` to show object properties, comments, etc.
+  
+  ```javascript
+  customization: {
+      hideRightMenu: false
+  }
+  ```
+</ParamField>
+
+<ParamField path="editorConfig.customization.hideRulers" type="boolean" default={true}>
+  Hide rulers in document editor.
+  
+  ```javascript
+  customization: {
+      hideRulers: false  // Show rulers
+  }
+  ```
+</ParamField>
+
+### Review/Track Changes
+
+<ParamField path="editorConfig.customization.review.showReviewChanges" type="boolean" default={false}>
+  Show tracked changes panel on load.
+  
+  ```javascript
+  customization: {
+      review: {
+          showReviewChanges: true
+      }
+  }
+  ```
+</ParamField>
+
+<Note>
+The module automatically migrates the deprecated `showReviewChanges` property to `review.showReviewChanges`.
+</Note>
+
+### Other Customization Options
+
+OnlyOfficeEditorModule doesn't modify these, but they're supported:
+
+<ParamField path="editorConfig.customization.chat" type="boolean">
+  Enable/disable chat feature.
+</ParamField>
+
+<ParamField path="editorConfig.customization.comments" type="boolean">
+  Enable/disable comments.
+</ParamField>
+
+<ParamField path="editorConfig.customization.zoom" type="number">
+  Initial zoom level (percentage).
+</ParamField>
+
+<ParamField path="editorConfig.customization.autosave" type="boolean">
+  Enable/disable autosave.
+</ParamField>
+
+<ParamField path="editorConfig.customization.forcesave" type="boolean">
+  Enable force save mode.
+</ParamField>
+
+### Complete Customization Example
+
+```javascript
+var config = {
+    document: {
+        fileType: 'docx',
+        key: 'doc-123',
+        title: 'Contract.docx',
+        url: 'https://example.com/contract.docx'
+    },
+    documentType: 'word',
+    editorConfig: {
+        mode: 'edit',
+        lang: 'en',
+        user: {
+            id: 'user-456',
+            name: 'John Doe'
+        },
+        customization: {
+            uiTheme: 'theme-dark',
+            compactToolbar: true,
+            toolbarNoTabs: false,
+            hideRightMenu: false,
+            hideRulers: false,
+            zoom: 120,
+            autosave: true,
+            chat: false,
+            comments: true,
+            review: {
+                showReviewChanges: true
+            }
+        }
+    }
+};
+
+OnlyOfficeEditorModule.init('editorContainer', config);
+```
+
+## Events
+
+The `config.events` object is managed internally by OnlyOfficeEditorModule. Instead of configuring events directly, use the `options` parameter.
+
+### Module Event Callbacks
+
+Pass callbacks through the `options` parameter of `init()`:
+
+<ParamField path="options.onReady" type="function">
+  Called when the editor application is initialized and ready to use.
+  
+  ```javascript
+  options: {
+      onReady: function() {
+          console.log('Editor is ready');
+          // Enable save button, etc.
+      }
+  }
+  ```
+  
+  **Maps to:** OnlyOffice `onAppReady` event
+</ParamField>
+
+<ParamField path="options.onDocumentReady" type="function">
+  Called when the document has been fully loaded in the editor.
+  
+  ```javascript
+  options: {
+      onDocumentReady: function() {
+          console.log('Document loaded');
+          // Document is now editable
+      }
+  }
+  ```
+  
+  **Maps to:** OnlyOffice `onDocumentReady` event
+</ParamField>
+
+<ParamField path="options.onError" type="function">
+  Called when an error occurs in the editor.
+  
+  ```javascript
+  options: {
+      onError: function(event) {
+          console.error('Editor error:', event);
+          alert('An error occurred: ' + event.data);
+      }
+  }
+  ```
+  
+  **Maps to:** OnlyOffice `onError` event
+  
+  **Parameters:**
+  - `event`: Error event object with details
+</ParamField>
+
+### Internal Events
+
+These events are handled internally by the module:
+
+- **onDownloadAs**: Triggered when document download completes (used by `getEditedDocumentUrl()`)
+- **onAppReady**: Hides loading indicator and calls `options.onReady`
+
+### Event Flow Example
+
+```javascript
+var config = {
+    document: {
+        fileType: 'docx',
+        key: 'doc-789',
+        title: 'Document.docx',
+        url: 'https://example.com/doc.docx'
+    },
+    documentType: 'word'
+};
+
+var options = {
+    onReady: function() {
+        console.log('1. Editor initialized');
+        document.getElementById('saveButton').disabled = false;
+    },
+    onDocumentReady: function() {
+        console.log('2. Document loaded and ready for editing');
+        document.getElementById('loadingMessage').style.display = 'none';
+    },
+    onError: function(evt) {
+        console.error('3. Error occurred:', evt);
+        document.getElementById('errorMessage').textContent = 
+            'Failed to load editor: ' + (evt.data || 'Unknown error');
+        document.getElementById('errorMessage').style.display = 'block';
+    }
+};
+
+var editor = OnlyOfficeEditorModule.init('editorContainer', config, options);
+```
+
+<Warning>
+Do NOT set `config.events` directly. The module overwrites this property to manage internal event handling. Use the `options` parameter instead.
+</Warning>
+
+## Dimensions
+
+Control the editor size:
+
+<ParamField path="height" type="string">
+  Editor height with CSS unit.
+  
+  ```javascript
+  height: '600px'  // or '100%', '80vh', etc.
+  ```
+</ParamField>
+
+<ParamField path="width" type="string">
+  Editor width with CSS unit.
+  
+  ```javascript
+  width: '100%'  // or '800px', etc.
+  ```
+</ParamField>
+
+## Editor Type
+
+<ParamField path="type" type="string">
+  Platform type: `'desktop'` or `'mobile'`.
+  
+  ```javascript
+  type: 'desktop'
+  ```
+</ParamField>
+
+## Proxy Configuration
+
+For `getEditedDocumentBlob()` to work with cross-origin restrictions:
+
+```javascript
+// Set global proxy URL before calling getEditedDocumentBlob()
+window.__onlyOfficeProxyUrl = '/api/document-proxy?url=';
+
+// The module will now fetch documents through your proxy
+OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer')
+    .then(function(blob) {
+        // Process blob
+    });
+```
+
+### Proxy Implementation Example (ASP.NET)
+
+```csharp
+[Route("api/document-proxy")]
+public IActionResult ProxyDocument(string url)
+{
+    if (string.IsNullOrEmpty(url))
+        return BadRequest();
+    
+    using (var client = new HttpClient())
+    {
+        var response = client.GetAsync(url).Result;
+        var content = response.Content.ReadAsByteArrayAsync().Result;
+        return File(content, "application/octet-stream");
+    }
+}
+```
+
+## Complete Configuration Example
+
+```javascript
+// Optional: Set proxy for cross-origin document downloads
+window.__onlyOfficeProxyUrl = '/api/proxy?url=';
+
+var config = {
+    document: {
+        fileType: 'docx',
+        key: 'unique-key-' + documentId + '-v' + version,
+        title: 'Project Proposal.docx',
+        url: 'https://storage.example.com/documents/proposal.docx',
+        permissions: {
+            edit: true,
+            download: true,
+            print: true,
+            review: true,
+            comment: true
+        }
+    },
+    documentType: 'word',
+    editorConfig: {
+        mode: 'edit',
+        lang: 'en',
+        callbackUrl: 'https://example.com/api/documents/save-callback',
+        user: {
+            id: currentUserId,
+            name: currentUserName,
+            group: currentUserGroup
+        },
+        customization: {
+            uiTheme: 'theme-classic-light',
+            compactToolbar: false,
+            hideRightMenu: false,
+            hideRulers: false,
+            autosave: true,
+            forcesave: false,
+            comments: true,
+            chat: false,
+            zoom: 100,
+            review: {
+                showReviewChanges: true
+            }
+        }
+    },
+    height: '100%',
+    width: '100%',
+    type: 'desktop'
+};
+
+var options = {
+    onReady: function() {
+        console.log('Editor ready');
+        hideLoadingSpinner();
+        enableSaveButton();
+    },
+    onDocumentReady: function() {
+        console.log('Document loaded');
+        trackDocumentOpen(documentId);
+    },
+    onError: function(error) {
+        console.error('Editor error:', error);
+        showErrorMessage('Failed to load document');
+        logError(error);
+    }
+};
+
+var editor = OnlyOfficeEditorModule.init('editorContainer', config, options);
+
+if (!editor) {
+    console.error('Failed to initialize editor');
+    showErrorMessage('Could not start document editor');
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Document Keys" icon="key">
+    Always generate unique keys for each document version. Include version numbers or timestamps.
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Always provide `onError` callback to handle initialization and runtime errors gracefully.
+  </Card>
+  <Card title="Permissions" icon="shield">
+    Set appropriate permissions based on user roles to control editing, downloading, and printing.
+  </Card>
+  <Card title="Customization" icon="palette">
+    Test different UI themes and toolbar configurations to match your application's design.
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Module Methods](/api/javascript/module-methods) - Detailed method documentation
+- [Overview](/api/javascript/overview) - JavaScript API overview
+- [OnlyOffice API Documentation](https://api.onlyoffice.com/editors/config/) - Official OnlyOffice configuration reference

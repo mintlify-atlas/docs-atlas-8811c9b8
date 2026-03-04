@@ -1,0 +1,246 @@
+---
+title: "Download Action"
+description: "Download documents from server storage using the OnlyOfficeHandler"
+---
+
+## Overview
+
+The `download` action retrieves document files from the server's file storage and streams them to the client. This action is used by the OnlyOffice Document Server to access documents for editing or viewing.
+
+## Endpoint
+
+```
+GET OnlyOfficeHandler.ashx?action=download&fileId={fileId}
+```
+
+## Query Parameters
+
+<ParamField query="action" type="string" required>
+  Must be set to `download` to invoke this action
+</ParamField>
+
+<ParamField query="fileId" type="string" required>
+  The unique identifier of the file to download. The handler searches for files matching the pattern `{fileId}.*` in the uploads directory.
+</ParamField>
+
+## Request Example
+
+```http
+GET /OnlyOfficeHandler.ashx?action=download&fileId=doc123 HTTP/1.1
+Host: your-app.com
+```
+
+## Response
+
+### Success Response (200 OK)
+
+When the file is found, the handler returns the file as a binary stream:
+
+<ResponseField name="statusCode" type="number" default="200">
+  HTTP status code indicating success
+</ResponseField>
+
+<ResponseField name="Content-Type" type="string" default="application/octet-stream">
+  MIME type of the response, set to generic binary stream
+</ResponseField>
+
+<ResponseField name="Content-Disposition" type="string">
+  Header indicating the file should be downloaded with its original filename: `attachment; filename={filename}`
+</ResponseField>
+
+<ResponseField name="body" type="binary">
+  The raw file contents
+</ResponseField>
+
+#### Example Success Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename=doc123.docx
+
+[Binary file contents]
+```
+
+### Error Response (404 Not Found)
+
+When the file is not found or the fileId is invalid:
+
+<ResponseField name="statusCode" type="number" default="404">
+  HTTP status code indicating the file was not found
+</ResponseField>
+
+<ResponseField name="body" type="string" default="File not found">
+  Error message in plain text format
+</ResponseField>
+
+#### Example Error Response
+
+```http
+HTTP/1.1 404 Not Found
+Content-Type: text/plain
+
+File not found
+```
+
+## File Storage Location
+
+Files are stored in the `~/App_Data/uploads` directory with the naming pattern:
+
+```
+{fileId}.{extension}
+```
+
+### File Resolution Process
+
+1. The handler maps the uploads directory: `~/App_Data/uploads`
+2. Creates the directory if it doesn't exist
+3. Searches for files matching `{fileId}.*` pattern
+4. Returns the first matching file
+
+### Example File Structure
+
+```
+App_Data/
+└── uploads/
+    ├── doc123.docx
+    ├── sheet456.xlsx
+    └── presentation789.pptx
+```
+
+## Error Handling
+
+The download action handles the following error conditions:
+
+### Missing or Empty fileId
+
+If the `fileId` parameter is missing, null, or whitespace:
+
+```http
+HTTP/1.1 404 Not Found
+File not found
+```
+
+### File Not Found
+
+If no file matches the `{fileId}.*` pattern:
+
+```http
+HTTP/1.1 404 Not Found
+File not found
+```
+
+### File Exists Check
+
+Even if a matching filename is found, the handler verifies the file exists before streaming:
+
+```csharp
+if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+{
+    context.Response.StatusCode = 404;
+    context.Response.Write("File not found");
+    return;
+}
+```
+
+## Implementation Details
+
+### Source Code Reference
+
+The download action is implemented in:
+
+```
+Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx.cs:51-69
+```
+
+### Code Example
+
+```csharp
+private static void Download(HttpContext context)
+{
+    var fileId = context.Request["fileId"];
+    var uploads = UploadsPath(context);
+    var path = ResolveStoredFile(uploads, fileId);
+    
+    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+    {
+        context.Response.StatusCode = 404;
+        context.Response.Write("File not found");
+        return;
+    }
+
+    var fileName = Path.GetFileName(path);
+    context.Response.Clear();
+    context.Response.ContentType = "application/octet-stream";
+    context.Response.AddHeader("Content-Disposition", "attachment; filename=" + fileName);
+    context.Response.WriteFile(path);
+    context.Response.End();
+}
+```
+
+## Usage in OnlyOffice Document Server
+
+The download action is typically used in the OnlyOffice Document Server configuration as the document URL:
+
+```javascript
+var docEditor = new DocsAPI.DocEditor("placeholder", {
+    document: {
+        url: "https://your-app.com/OnlyOfficeHandler.ashx?action=download&fileId=doc123",
+        fileType: "docx",
+        key: "doc123",
+        title: "Document.docx"
+    },
+    // ... other config
+});
+```
+
+## Security Considerations
+
+<Warning>
+  The download action does not implement authentication or authorization checks. You should add security measures at the application level to prevent unauthorized file access.
+</Warning>
+
+### Recommended Security Measures
+
+1. **Authentication**: Verify user identity before allowing downloads
+2. **Authorization**: Check if the user has permission to access the specific file
+3. **File ID Validation**: Validate that the fileId parameter doesn't contain path traversal characters
+4. **Rate Limiting**: Implement rate limiting to prevent abuse
+
+### Example Security Implementation
+
+```csharp
+private static void Download(HttpContext context)
+{
+    // Add authentication check
+    if (!IsUserAuthenticated(context))
+    {
+        context.Response.StatusCode = 401;
+        context.Response.Write("Unauthorized");
+        return;
+    }
+    
+    var fileId = context.Request["fileId"];
+    
+    // Add authorization check
+    if (!UserCanAccessFile(context.User, fileId))
+    {
+        context.Response.StatusCode = 403;
+        context.Response.Write("Forbidden");
+        return;
+    }
+    
+    // Continue with download logic...
+}
+```
+
+## Related Actions
+
+<CardGroup cols={2}>
+  <Card title="Callback Action" icon="arrow-rotate-left" href="/api/handlers/callback">
+    Handle document updates from OnlyOffice Document Server
+  </Card>
+  <Card title="Proxy Action" icon="arrow-right-arrow-left" href="/api/handlers/proxy">
+    Proxy external document requests
+  </Card>
+</CardGroup>

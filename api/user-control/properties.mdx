@@ -1,0 +1,303 @@
+---
+title: 'Properties'
+description: 'Complete reference for OnlyOfficeEditor UserControl properties'
+---
+
+## Document Properties
+
+These properties define the document being edited and are typically set by the `SetDocument*` methods.
+
+<ParamField path="DocumentUrl" type="string">
+  The absolute URL from which OnlyOffice Document Server can download the document. This URL must be accessible from the Document Server.
+  
+  **Storage**: ViewState  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.DocumentUrl = "https://app.example.com/handler.ashx?action=download&fileId=abc123";
+  ```
+  
+  <Note>
+  Automatically set by `SetDocumentFromBytes`, `SetDocumentFromFile`, and `SetDocumentFromUpload` methods.
+  </Note>
+</ParamField>
+
+<ParamField path="DocumentName" type="string">
+  Display name of the document shown in the editor interface. Used to determine file type extension.
+  
+  **Storage**: ViewState  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.DocumentName = "Annual Report 2024.docx";
+  ```
+</ParamField>
+
+<ParamField path="DocumentKey" type="string">
+  Unique identifier for the document revision. OnlyOffice uses this to determine if a document has changed. Must be updated when document content changes.
+  
+  **Storage**: ViewState  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.DocumentKey = "abc123def456_2024";
+  ```
+  
+  <Warning>
+  If the document content changes but the key remains the same, users may see stale cached versions.
+  </Warning>
+</ParamField>
+
+<ParamField path="CallbackUrl" type="string">
+  URL where OnlyOffice Document Server sends editing status updates and saves the modified document. Must be accessible from the Document Server.
+  
+  **Storage**: ViewState  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.CallbackUrl = "https://app.example.com/handler.ashx?action=callback&fileId=abc123";
+  ```
+  
+  <Note>
+  The callback handler receives POST requests with JSON payload containing document status and download URL.
+  </Note>
+</ParamField>
+
+## Configuration Properties
+
+<ParamField path="OnlyOfficeApiUrl" type="string" default='"https://doclinea.pjhidalgo.gob.mx:4443/web-apps/apps/api/documents/api.js"'>
+  URL to the OnlyOffice Document Server API JavaScript file. This is the main entry point for the editor.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.OnlyOfficeApiUrl = "https://docserver.example.com/web-apps/apps/api/documents/api.js";
+  ```
+  
+  <Warning>
+  This URL must be accessible from the client browser, not just from your server.
+  </Warning>
+</ParamField>
+
+<ParamField path="JwtSecret" type="string" default='"JGbxwFgrXgMcMrknjdxI"'>
+  Secret key for signing JWT tokens used to secure communication between your application and OnlyOffice Document Server.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.JwtSecret = ConfigurationManager.AppSettings["OnlyOfficeSecret"];
+  ```
+  
+  <Warning>
+  This must match the `secret` value in your Document Server configuration. Store securely in web.config or environment variables.
+  </Warning>
+</ParamField>
+
+<ParamField path="PublicBaseUrl" type="string" default='"https://192.168.10.34:44311"'>
+  The public base URL of your application used to construct absolute URLs for DocumentUrl and CallbackUrl. Required when running behind a reverse proxy or load balancer.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.PublicBaseUrl = "https://myapp.example.com";
+  ```
+  
+  <Note>
+  If not set, URLs are constructed using `Page.Request.Url`, which may not work correctly behind proxies.
+  </Note>
+</ParamField>
+
+## Editor Behavior Properties
+
+<ParamField path="Mode" type="string" default='"edit"'>
+  Editor mode: `"edit"` for full editing capabilities or `"view"` for read-only mode.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.Mode = HasPermission ? "edit" : "view";
+  ```
+  
+  **Valid values**:
+  - `"edit"` - Full editing features
+  - `"view"` - Read-only, no editing allowed
+</ParamField>
+
+<ParamField path="Lang" type="string" default='"es"'>
+  Editor interface language code (ISO 639-1).
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.Lang = "en"; // English
+  MyEditor.Lang = "es"; // Spanish
+  MyEditor.Lang = "fr"; // French
+  ```
+  
+  **Common values**: `"en"`, `"es"`, `"fr"`, `"de"`, `"it"`, `"pt"`, `"ru"`, `"zh"`, etc.
+</ParamField>
+
+<ParamField path="EditorHeight" type="string" default='"520px"'>
+  CSS height value for the editor container.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.EditorHeight = "600px";
+  MyEditor.EditorHeight = "80vh";
+  ```
+  
+  Supports any valid CSS height value (px, %, vh, etc.)
+</ParamField>
+
+## User Properties
+
+<ParamField path="UserId" type="string" default='"1"'>
+  Unique identifier for the current user editing the document. Used for collaboration features and tracking.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.UserId = CurrentUser.Id.ToString();
+  ```
+</ParamField>
+
+<ParamField path="UserDisplayName" type="string" default='"Usuario"'>
+  Display name shown in the editor interface for the current user. Used in comments and collaboration features.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.UserDisplayName = CurrentUser.FullName;
+  ```
+</ParamField>
+
+## Client Integration Properties
+
+<ParamField path="CaptureTriggerId" type="string" default="null">
+  Comma-separated list of button/control IDs that should trigger document capture. When clicked, the editor content is captured to the hidden field.
+  
+  **Access**: Get/Set
+  
+  ```csharp
+  MyEditor.CaptureTriggerId = "btnSave";
+  MyEditor.CaptureTriggerId = "btnSave,btnSaveAndClose,btnExport";
+  ```
+  
+  <Note>
+  The control automatically injects JavaScript to handle the capture and trigger postback.
+  </Note>
+</ParamField>
+
+<ParamField path="EditorContainerId" type="string" readonly>
+  Client-side ID of the HTML element that contains the OnlyOffice editor iframe. Generated as `{ClientID}_editor`.
+  
+  **Access**: Get only
+  
+  ```csharp
+  string containerId = MyEditor.EditorContainerId;
+  // Result: "MyEditor_editor"
+  ```
+</ParamField>
+
+<ParamField path="HiddenFieldClientId" type="string" readonly>
+  Client-side ID of the hidden field that stores the captured document as Base64. Used for client-side integration.
+  
+  **Access**: Get only
+  
+  ```csharp
+  string hiddenId = MyEditor.HiddenFieldClientId;
+  // Use in JavaScript: document.getElementById(hiddenId).value
+  ```
+</ParamField>
+
+## State Properties
+
+<ParamField path="ConfigJson" type="string" readonly>
+  JSON configuration string passed to the OnlyOffice editor JavaScript API. Generated automatically in PreRender phase.
+  
+  **Access**: Get only (set internally)
+  
+  Returns `"null"` if no document is loaded, otherwise returns JSON with token, document, documentType, and editorConfig.
+  
+  ```json
+  {
+    "token": "eyJhbGc...",
+    "document": {
+      "fileType": "docx",
+      "key": "abc123_2024",
+      "title": "Report.docx",
+      "url": "https://..."
+    },
+    "documentType": "word",
+    "editorConfig": {
+      "callbackUrl": "https://...",
+      "mode": "edit",
+      "lang": "es",
+      "user": {
+        "id": "123",
+        "name": "John Doe"
+      }
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="HasDocument" type="bool" readonly>
+  Indicates whether a document has been loaded into the editor. Returns `true` if DocumentUrl, DocumentName, and DocumentKey are all set.
+  
+  **Access**: Get only
+  
+  ```csharp
+  if (MyEditor.HasDocument)
+  {
+      // Editor has a document loaded
+      byte[] pdf = MyEditor.ConvertCurrentDocumentToPdfBytes();
+  }
+  ```
+</ParamField>
+
+<ParamField path="HasEditedDocument" type="bool" readonly>
+  Indicates whether the user has captured edited content from the editor. Returns `true` if the hidden field contains Base64 data.
+  
+  **Access**: Get only
+  
+  ```csharp
+  protected void btnSave_Click(object sender, EventArgs e)
+  {
+      if (MyEditor.HasEditedDocument)
+      {
+          byte[] edited = MyEditor.GetEditedDocumentBytes();
+          SaveToDatabase(edited);
+          MyEditor.ClearEditedDocument();
+      }
+  }
+  ```
+  
+  <Note>
+  This property only reflects client-side captured content, not real-time editor state. Content must be captured via `CaptureTriggerId` mechanism or JavaScript API.
+  </Note>
+</ParamField>
+
+## Property Summary Table
+
+| Property | Type | Access | Default | Description |
+|----------|------|--------|---------|-------------|
+| DocumentUrl | string | Get/Set | null | Document download URL |
+| DocumentName | string | Get/Set | null | Display name |
+| DocumentKey | string | Get/Set | null | Unique revision key |
+| CallbackUrl | string | Get/Set | null | Callback handler URL |
+| OnlyOfficeApiUrl | string | Get/Set | (see above) | Document Server API URL |
+| JwtSecret | string | Get/Set | (see above) | JWT signing secret |
+| PublicBaseUrl | string | Get/Set | (see above) | Public base URL |
+| Mode | string | Get/Set | "edit" | Editor mode |
+| Lang | string | Get/Set | "es" | Interface language |
+| EditorHeight | string | Get/Set | "520px" | Container height |
+| UserId | string | Get/Set | "1" | Current user ID |
+| UserDisplayName | string | Get/Set | "Usuario" | Current user name |
+| CaptureTriggerId | string | Get/Set | null | Capture button IDs |
+| EditorContainerId | string | Get | - | Editor container ID |
+| ConfigJson | string | Get | - | Editor configuration JSON |
+| HasDocument | bool | Get | - | Has document loaded |
+| HiddenFieldClientId | string | Get | - | Hidden field client ID |
+| HasEditedDocument | bool | Get | - | Has captured edits |

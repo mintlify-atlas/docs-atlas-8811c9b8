@@ -1,0 +1,223 @@
+---
+title: Installation
+description: Step-by-step guide to install and configure the OnlyOffice Control in your ASP.NET Web Forms application
+---
+
+## Prerequisites
+
+Before installing the OnlyOffice Control, ensure you have:
+
+- An ASP.NET Web Forms project targeting .NET Framework 4.8
+- Access to an OnlyOffice Document Server instance
+- The OnlyOffice Document Server API URL and JWT secret
+
+<Warning>
+Make sure your OnlyOffice Document Server is properly configured with JWT enabled for secure communication.
+</Warning>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Copy the Controls Folder">
+    Copy the entire `Controls/OnlyOfficeEditor` folder to your ASP.NET Web Forms project root directory.
+
+    Your project structure should look like this:
+
+    ```
+    YourProject/
+    ├── Controls/
+    │   └── OnlyOfficeEditor/
+    │       ├── OnlyOfficeEditor.ascx
+    │       ├── OnlyOfficeEditor.ascx.cs
+    │       ├── OnlyOfficeEditor.js
+    │       ├── OnlyOfficeEditor.css
+    │       ├── OnlyOfficeHandler.ashx
+    │       ├── OnlyOfficeHandler.ashx.cs
+    │       └── OnlyOfficeJwt.cs
+    ├── Default.aspx
+    └── Web.config
+    ```
+  </Step>
+
+  <Step title="Configure Web.config (Optional)">
+    If you plan to upload large documents, configure the file upload limits in your `Web.config`:
+
+    ```xml Web.config
+    <?xml version="1.0" encoding="utf-8"?>
+    <configuration>
+      <system.web>
+        <compilation debug="true" targetFramework="4.8" />
+        <!-- Increase max request length to 150MB (in KB) -->
+        <httpRuntime targetFramework="4.8" 
+                     maxRequestLength="153600" 
+                     executionTimeout="3600" />
+      </system.web>
+
+      <system.webServer>
+        <security>
+          <requestFiltering>
+            <!-- Increase max content length to 150MB (in bytes) -->
+            <requestLimits maxAllowedContentLength="157286400" />
+          </requestFiltering>
+        </security>
+      </system.webServer>
+    </configuration>
+    ```
+
+    <Note>
+    The `maxRequestLength` is in kilobytes, while `maxAllowedContentLength` is in bytes.
+    </Note>
+  </Step>
+
+  <Step title="Create Uploads Directory">
+    The control stores uploaded and edited documents in `~/App_Data/uploads`. This directory is created automatically, but you can create it manually:
+
+    ```
+    YourProject/
+    └── App_Data/
+        └── uploads/
+    ```
+
+    <Warning>
+    Ensure the IIS application pool identity has write permissions to the `App_Data` folder.
+    </Warning>
+  </Step>
+
+  <Step title="Configure OnlyOffice Settings">
+    Open `Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx.cs` and update the configuration properties:
+
+    ```csharp OnlyOfficeEditor.ascx.cs
+    // URL of the OnlyOffice Document Server API
+    public string OnlyOfficeApiUrl { get; set; } = "https://your-server.com/web-apps/apps/api/documents/api.js";
+
+    // JWT secret key - must match your OnlyOffice server configuration
+    public string JwtSecret { get; set; } = "your-secret-key";
+
+    // Public base URL of your application
+    public string PublicBaseUrl { get; set; } = "https://your-app.com";
+    ```
+
+    <Accordion title="How to find these values">
+      **OnlyOfficeApiUrl**: This is the URL to the OnlyOffice Document Server API JavaScript file. If your OnlyOffice server is at `https://docs.example.com`, the API URL would be `https://docs.example.com/web-apps/apps/api/documents/api.js`.
+
+      **JwtSecret**: This is the JWT secret configured in your OnlyOffice Document Server's `local.json` configuration file under `services.CoAuthoring.secret.session.string`.
+
+      **PublicBaseUrl**: This is the public-facing URL of your ASP.NET application. OnlyOffice Document Server must be able to reach this URL to download documents and send callbacks.
+    </Accordion>
+  </Step>
+
+  <Step title="Verify Installation">
+    Build your project to ensure there are no compilation errors:
+
+    ```bash
+    # In Visual Studio
+    Build > Build Solution (Ctrl+Shift+B)
+    ```
+
+    If you encounter any compilation errors, verify that:
+    - All files are properly copied
+    - The namespace matches your project
+    - .NET Framework 4.8 is targeted
+  </Step>
+</Steps>
+
+## Configuration Options
+
+### JWT Secret Management
+
+For production environments, it's recommended to store the JWT secret in a secure location rather than hardcoding it:
+
+<CodeGroup>
+
+```xml Web.config (AppSettings)
+<configuration>
+  <appSettings>
+    <add key="OnlyOffice:ApiUrl" value="https://your-server.com/web-apps/apps/api/documents/api.js" />
+    <add key="OnlyOffice:JwtSecret" value="your-secret-key" />
+    <add key="OnlyOffice:PublicBaseUrl" value="https://your-app.com" />
+  </appSettings>
+</configuration>
+```
+
+```csharp OnlyOfficeEditor.ascx.cs (Reading from config)
+using System.Configuration;
+
+public string OnlyOfficeApiUrl { get; set; } = 
+    ConfigurationManager.AppSettings["OnlyOffice:ApiUrl"] ?? "";
+
+public string JwtSecret { get; set; } = 
+    ConfigurationManager.AppSettings["OnlyOffice:JwtSecret"] ?? "";
+
+public string PublicBaseUrl { get; set; } = 
+    ConfigurationManager.AppSettings["OnlyOffice:PublicBaseUrl"] ?? "";
+```
+
+</CodeGroup>
+
+### Network Configuration
+
+<Note>
+If your OnlyOffice Document Server uses self-signed SSL certificates, the control includes certificate validation bypass. For production, configure proper SSL certificates.
+</Note>
+
+The control uses TLS 1.2 for secure communication:
+
+```csharp
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+```
+
+## Namespace Configuration
+
+The default namespace is `OnlyOfficeControl.Controls.OnlyOfficeEditorBundle`. If you need to change it:
+
+1. Update the namespace in all `.cs` files
+2. Update the `Inherits` attribute in `.ascx` files
+3. Rebuild the project
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Control not appearing on page">
+    Verify the control is properly registered on your ASPX page:
+    
+    ```asp
+    <%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+                 TagPrefix="oo" 
+                 TagName="Editor" %>
+    ```
+  </Accordion>
+
+  <Accordion title="OnlyOffice editor shows 'Cannot connect to server'">
+    This usually means:
+    - The `OnlyOfficeApiUrl` is incorrect or unreachable
+    - CORS is not properly configured on the OnlyOffice server
+    - The OnlyOffice server cannot reach your `DocumentUrl` (firewall/network issue)
+  </Accordion>
+
+  <Accordion title="JWT token errors">
+    Ensure:
+    - The `JwtSecret` matches exactly with your OnlyOffice server configuration
+    - JWT is enabled on the OnlyOffice Document Server
+    - The secret is not empty or whitespace
+  </Accordion>
+
+  <Accordion title="File upload errors">
+    Check:
+    - Web.config has proper file size limits configured
+    - IIS application pool identity has write permissions to `App_Data`
+    - The `uploads` folder exists and is writable
+  </Accordion>
+
+  <Accordion title="Callback not working">
+    Verify:
+    - The `PublicBaseUrl` is publicly accessible from the OnlyOffice server
+    - The OnlyOffice server can reach your application (no firewall blocking)
+    - The `CallbackUrl` is properly generated
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Quick Start" icon="rocket" href="/quickstart">
+  Learn how to use the OnlyOffice Control in your application
+</Card>

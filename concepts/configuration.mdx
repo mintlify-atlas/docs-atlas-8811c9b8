@@ -1,0 +1,212 @@
+---
+title: Configuration Properties
+description: Configure the OnlyOffice Editor control with essential properties for server connectivity, authentication, and user experience
+---
+
+## Overview
+
+The `OnlyOfficeEditor` control exposes several configuration properties that control how the editor connects to OnlyOffice Document Server, handles authentication, and customizes the user experience.
+
+## Server Configuration
+
+<ParamField path="OnlyOfficeApiUrl" type="string" required>
+  The URL to the OnlyOffice Document Server API JavaScript file.
+  
+  ```csharp
+  editor.OnlyOfficeApiUrl = "https://doclinea.pjhidalgo.gob.mx:4443/web-apps/apps/api/documents/api.js";
+  ```
+  
+  <Note>
+    This URL must point to the `api.js` file on your OnlyOffice Document Server installation. The control uses this to load the editor's JavaScript API.
+  </Note>
+</ParamField>
+
+<ParamField path="PublicBaseUrl" type="string" required>
+  The public base URL of your ASP.NET application that OnlyOffice Document Server can reach.
+  
+  ```csharp
+  editor.PublicBaseUrl = "https://192.168.10.34:44311";
+  ```
+  
+  <Warning>
+    This URL must be accessible from the OnlyOffice Document Server. It's used to construct callback URLs and document download URLs.
+  </Warning>
+</ParamField>
+
+## Authentication Configuration
+
+<ParamField path="JwtSecret" type="string" required>
+  The secret key used for JWT token generation and validation.
+  
+  ```csharp
+  editor.JwtSecret = "JGbxwFgrXgMcMrknjdxI";
+  ```
+  
+  <Warning>
+    This secret must match the JWT secret configured in your OnlyOffice Document Server. Keep this value secure and never expose it in client-side code.
+  </Warning>
+  
+  See [JWT Authentication](/concepts/jwt-authentication) for more details on how JWT tokens are used.
+</ParamField>
+
+## Editor Behavior
+
+<ParamField path="Mode" type="string" default="edit">
+  The editing mode for the document.
+  
+  ```csharp
+  editor.Mode = "edit"; // or "view"
+  ```
+  
+  **Supported values:**
+  - `edit` - Full editing capabilities
+  - `view` - Read-only mode
+</ParamField>
+
+<ParamField path="EditorHeight" type="string" default="520px">
+  The height of the editor container.
+  
+  ```csharp
+  editor.EditorHeight = "520px";
+  ```
+  
+  Accepts any valid CSS height value (px, %, vh, etc.).
+</ParamField>
+
+<ParamField path="Lang" type="string" default="es">
+  The language code for the editor interface.
+  
+  ```csharp
+  editor.Lang = "en"; // English
+  editor.Lang = "es"; // Spanish
+  ```
+  
+  See OnlyOffice documentation for supported language codes.
+</ParamField>
+
+## User Configuration
+
+<ParamField path="UserId" type="string" default="1">
+  The unique identifier for the current user.
+  
+  ```csharp
+  editor.UserId = User.Identity.GetUserId();
+  ```
+  
+  <Note>
+    This ID is used to track which users are editing the document and for collaboration features.
+  </Note>
+</ParamField>
+
+<ParamField path="UserDisplayName" type="string" default="Usuario">
+  The display name for the current user shown in the editor.
+  
+  ```csharp
+  editor.UserDisplayName = "John Doe";
+  ```
+</ParamField>
+
+## Advanced Configuration
+
+<ParamField path="CaptureTriggerId" type="string">
+  Comma-separated list of button IDs that will trigger document capture.
+  
+  ```csharp
+  editor.CaptureTriggerId = "btnSave,btnSubmit";
+  ```
+  
+  When these buttons are clicked, the control automatically captures the edited document content and stores it in a hidden field before postback.
+  
+  <Accordion title="How document capture works">
+    1. The control finds buttons with the specified IDs
+    2. Attaches onclick handlers that call the JavaScript `captureToHiddenField` method
+    3. Downloads the edited document from OnlyOffice
+    4. Encodes it as Base64 and stores in a hidden field
+    5. Triggers postback to the specified button
+    
+    ```csharp OnlyOfficeEditor.ascx.cs:473-477
+    var capJs = string.Format(
+        "if(typeof OnlyOfficeEditorModule!=='undefined'){{OnlyOfficeEditorModule.captureToHiddenField('{0}','{1}',{{autoPostBack:true,postBackTarget:'{2}'}}).catch(function(e){{console.error(e)}});}};return false;",
+        EditorContainerId,
+        hfEditedDocumentBase64.ClientID,
+        capBtn.UniqueID);
+    ```
+  </Accordion>
+</ParamField>
+
+## Document Properties
+
+<ParamField path="DocumentUrl" type="string">
+  The absolute URL where OnlyOffice can download the document.
+  
+  Typically set automatically when using `SetDocumentFromBytes()` or `SetDocumentFromFile()`.
+</ParamField>
+
+<ParamField path="DocumentName" type="string">
+  The display name of the document shown in the editor.
+</ParamField>
+
+<ParamField path="DocumentKey" type="string">
+  A unique key identifying this version of the document.
+  
+  <Note>
+    OnlyOffice uses this key for caching. If the key changes, OnlyOffice treats it as a new document version.
+  </Note>
+</ParamField>
+
+<ParamField path="CallbackUrl" type="string">
+  The URL where OnlyOffice will POST callback notifications about document status changes.
+  
+  See [Callback Handling](/concepts/callback-handling) for details on implementing the callback endpoint.
+</ParamField>
+
+## Example: Complete Configuration
+
+```aspx
+<oo:OnlyOfficeEditor 
+    runat="server" 
+    ID="docEditor"
+    OnlyOfficeApiUrl="https://your-onlyoffice-server.com/web-apps/apps/api/documents/api.js"
+    JwtSecret="your-secure-secret-key"
+    PublicBaseUrl="https://your-app.com"
+    Mode="edit"
+    Lang="en"
+    EditorHeight="600px"
+    UserId="<%= CurrentUserId %>"
+    UserDisplayName="<%= CurrentUserName %>"
+    CaptureTriggerId="btnSave" />
+```
+
+```csharp Code-behind
+protected void Page_Load(object sender, EventArgs e)
+{
+    if (!IsPostBack)
+    {
+        docEditor.OnlyOfficeApiUrl = ConfigurationManager.AppSettings["OnlyOfficeApiUrl"];
+        docEditor.JwtSecret = ConfigurationManager.AppSettings["OnlyOfficeJwtSecret"];
+        docEditor.PublicBaseUrl = ConfigurationManager.AppSettings["PublicBaseUrl"];
+        docEditor.UserId = User.Identity.GetUserId();
+        docEditor.UserDisplayName = User.Identity.Name;
+        
+        // Load document
+        docEditor.SetDocumentFromFile(Server.MapPath("~/Documents/sample.docx"));
+    }
+}
+```
+
+## Best Practices
+
+<Warning>
+  **Security Considerations:**
+  - Store `JwtSecret` in a secure configuration file or environment variable
+  - Never commit secrets to source control
+  - Use different secrets for development and production environments
+  - Ensure `PublicBaseUrl` uses HTTPS in production
+</Warning>
+
+<Note>
+  **Performance Tips:**
+  - Cache configuration values from AppSettings/Web.config
+  - Set `EditorHeight` appropriately for your layout to avoid scrolling issues
+  - Use meaningful `DocumentKey` values that change when document content changes
+</Note>

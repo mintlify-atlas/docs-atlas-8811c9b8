@@ -1,0 +1,155 @@
+---
+title: 'OnlyOfficeEditor UserControl'
+description: 'ASP.NET UserControl for embedding OnlyOffice Document Server editor in web forms'
+---
+
+## Overview
+
+The `OnlyOfficeEditor` UserControl provides a complete integration of OnlyOffice Document Server into ASP.NET Web Forms applications. It handles document loading, editing, conversion, and callback management with built-in JWT security.
+
+## Namespace
+
+```csharp
+OnlyOfficeControl.Controls.OnlyOfficeEditorBundle
+```
+
+## Inheritance
+
+```csharp
+System.Object
+  └─ System.Web.UI.Control
+      └─ System.Web.UI.UserControl
+          └─ OnlyOfficeEditor
+```
+
+## Class Declaration
+
+```csharp
+public partial class OnlyOfficeEditor : UserControl
+```
+
+## Usage Pattern
+
+### Basic Setup
+
+```aspx
+<%@ Register TagPrefix="oo" TagName="Editor" Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" %>
+
+<oo:Editor 
+    ID="MyEditor" 
+    runat="server"
+    OnlyOfficeApiUrl="https://docserver.example.com/web-apps/apps/api/documents/api.js"
+    JwtSecret="your-secret-key"
+    PublicBaseUrl="https://your-app.example.com"
+    Mode="edit"
+    Lang="es"
+    EditorHeight="600px"
+    UserId="123"
+    UserDisplayName="John Doe"
+/>
+```
+
+### Code-Behind Initialization
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    if (!IsPostBack)
+    {
+        // Load document from file
+        MyEditor.SetDocumentFromFile(
+            Server.MapPath("~/Documents/sample.docx"),
+            "Sample Document.docx"
+        );
+        
+        // Configure editor
+        MyEditor.Mode = "edit";
+        MyEditor.Lang = "en";
+        MyEditor.UserId = CurrentUser.Id.ToString();
+        MyEditor.UserDisplayName = CurrentUser.Name;
+    }
+}
+```
+
+### Capturing Edited Content
+
+```csharp
+// With capture trigger button
+MyEditor.CaptureTriggerId = "btnSave";
+
+protected void btnSave_Click(object sender, EventArgs e)
+{
+    if (MyEditor.HasEditedDocument)
+    {
+        byte[] editedContent = MyEditor.GetEditedDocumentBytes();
+        
+        // Save to database or file system
+        SaveDocument(editedContent, MyEditor.DocumentName);
+        
+        // Clear the captured document
+        MyEditor.ClearEditedDocument();
+    }
+}
+```
+
+### PDF Conversion
+
+```csharp
+protected void btnExportPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        // Convert current or edited document to PDF
+        byte[] pdfBytes = MyEditor.ConvertCurrentDocumentToPdfBytes();
+        
+        // Send to browser
+        Response.Clear();
+        Response.ContentType = "application/pdf";
+        Response.AddHeader("Content-Disposition", 
+            $"attachment; filename={Path.GetFileNameWithoutExtension(MyEditor.DocumentName)}.pdf");
+        Response.BinaryWrite(pdfBytes);
+        Response.End();
+    }
+    catch (Exception ex)
+    {
+        lblError.Text = "PDF conversion failed: " + ex.Message;
+    }
+}
+```
+
+## Key Features
+
+- **Document Loading**: Load from bytes, files, or upload handlers
+- **Edit & View Modes**: Support for both editing and read-only viewing
+- **JWT Security**: Built-in token generation for secure communication
+- **PDF Conversion**: Convert documents to PDF with retry logic
+- **Capture Mechanism**: Client-side capture of edited content to hidden field
+- **Multi-Language**: Support for multiple editor interface languages
+- **ViewState Persistence**: Document metadata persists across postbacks
+
+## Architecture
+
+<Note>
+The control uses ViewState to persist document metadata (URL, name, key, callback URL) across postbacks. The actual document content is stored in `~/App_Data/uploads/` with GUID-based filenames.
+</Note>
+
+## Security Considerations
+
+<Warning>
+The `JwtSecret` property must match the secret configured on your OnlyOffice Document Server. Store this securely in web.config or environment variables, not in source code.
+</Warning>
+
+## Browser Compatibility
+
+The OnlyOffice editor supports:
+- Chrome/Edge (recommended)
+- Firefox
+- Safari
+- Internet Explorer 11+ (with limitations)
+
+## Related Resources
+
+- [Properties Reference](/api/user-control/properties)
+- [Methods Reference](/api/user-control/methods)
+- [Events & Client Integration](/api/user-control/events)
+- [Configuration Guide](/concepts/configuration)

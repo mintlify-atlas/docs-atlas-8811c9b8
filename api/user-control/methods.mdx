@@ -1,0 +1,566 @@
+---
+title: 'Methods'
+description: 'Complete reference for OnlyOfficeEditor UserControl methods'
+---
+
+## Document Loading Methods
+
+These methods load documents into the editor from various sources.
+
+### SetDocumentFromBytes
+
+Loads a document into the editor from a byte array.
+
+```csharp
+public void SetDocumentFromBytes(byte[] data, string fileName)
+```
+
+<ParamField path="data" type="byte[]" required>
+  The document content as a byte array.
+</ParamField>
+
+<ParamField path="fileName" type="string" required>
+  The file name with extension (e.g., "report.docx"). The extension is used to determine document type.
+</ParamField>
+
+**Behavior**:
+- Generates a unique GUID-based file ID
+- Saves the document to `~/App_Data/uploads/` directory (creates if needed)
+- Sets DocumentName, DocumentKey, DocumentUrl, and CallbackUrl properties
+- Does nothing if data is null/empty or fileName is null/whitespace
+
+**Example**:
+```csharp
+// Load from database
+byte[] docBytes = GetDocumentFromDatabase(docId);
+MyEditor.SetDocumentFromBytes(docBytes, "Contract.docx");
+
+// Load from uploaded file
+if (FileUpload1.HasFile)
+{
+    byte[] uploadedBytes = FileUpload1.FileBytes;
+    MyEditor.SetDocumentFromBytes(uploadedBytes, FileUpload1.FileName);
+}
+```
+
+**File Storage**: Line 93-111
+```csharp
+var fileId = Guid.NewGuid().ToString("N");
+var ext = Path.GetExtension(fileName);
+var storedName = fileId + ext;
+var uploadsDir = HttpContext.Current.Server.MapPath("~/App_Data/uploads");
+Directory.CreateDirectory(uploadsDir);
+File.WriteAllBytes(Path.Combine(uploadsDir, storedName), data);
+```
+
+---
+
+### SetDocumentFromFile
+
+Loads a document from a file path on the server.
+
+```csharp
+public void SetDocumentFromFile(string serverFilePath, string displayName = null)
+```
+
+<ParamField path="serverFilePath" type="string" required>
+  Physical or virtual path to the file on the server.
+</ParamField>
+
+<ParamField path="displayName" type="string">
+  Optional display name for the document. If null, uses the file name from the path.
+</ParamField>
+
+**Behavior**:
+- Checks if file exists; returns silently if not found
+- Reads file contents and delegates to `SetDocumentFromBytes`
+- Uses file name from path if displayName not provided
+
+**Example**:
+```csharp
+// Load from server path with automatic name
+MyEditor.SetDocumentFromFile(
+    Server.MapPath("~/Documents/Template.docx")
+);
+
+// Load with custom display name
+MyEditor.SetDocumentFromFile(
+    Server.MapPath("~/Documents/template_v2.docx"),
+    "Company Template.docx"
+);
+
+// Load from absolute path
+MyEditor.SetDocumentFromFile(
+    @"C:\CompanyDocs\Report2024.xlsx",
+    "Annual Report 2024.xlsx"
+);
+```
+
+**Implementation**: Line 113-119
+
+---
+
+### SetDocumentFromUpload
+
+Loads a document that was previously uploaded via the handler.
+
+```csharp
+public void SetDocumentFromUpload(string fileId, string originalName)
+```
+
+<ParamField path="fileId" type="string" required>
+  The unique file identifier from the upload handler. Should correspond to a file in `~/App_Data/uploads/`.
+</ParamField>
+
+<ParamField path="originalName" type="string">
+  Original file name from the upload. If null, uses fileId as the display name.
+</ParamField>
+
+**Behavior**:
+- Does not verify file existence (assumes handler validated)
+- Constructs DocumentUrl and CallbackUrl using the fileId
+- Generates DocumentKey from fileId
+- Does nothing if fileId is null/whitespace
+
+**Example**:
+```csharp
+// After upload via handler
+protected void Page_Load(object sender, EventArgs e)
+{
+    string fileId = Request.QueryString["fileId"];
+    string fileName = Request.QueryString["fileName"];
+    
+    if (!string.IsNullOrEmpty(fileId))
+    {
+        MyEditor.SetDocumentFromUpload(fileId, fileName);
+    }
+}
+
+// With upload control integration
+protected void btnUpload_Click(object sender, EventArgs e)
+{
+    if (FileUpload1.HasFile)
+    {
+        string fileId = SaveUploadedFile(FileUpload1);
+        MyEditor.SetDocumentFromUpload(fileId, FileUpload1.FileName);
+    }
+}
+```
+
+**Implementation**: Line 121-131
+
+---
+
+## Document Retrieval Methods
+
+### GetEditedDocumentBytes
+
+Retrieves the captured edited document as a byte array.
+
+```csharp
+public byte[] GetEditedDocumentBytes()
+```
+
+**Returns**: `byte[]` - The edited document bytes, or `null` if no captured document exists or decoding fails.
+
+**Behavior**:
+- Reads the hidden field value containing Base64-encoded document
+- Decodes from Base64 to byte array
+- Returns null if hidden field is empty or decoding fails
+
+**Example**:
+```csharp
+protected void btnSave_Click(object sender, EventArgs e)
+{
+    if (MyEditor.HasEditedDocument)
+    {
+        byte[] editedBytes = MyEditor.GetEditedDocumentBytes();
+        
+        if (editedBytes != null)
+        {
+            // Save to database
+            SaveDocumentToDatabase(docId, editedBytes);
+            
+            // Or save to file
+            File.WriteAllBytes(
+                Server.MapPath($"~/Documents/Edited_{DateTime.Now:yyyyMMdd}.docx"),
+                editedBytes
+            );
+            
+            // Clear after saving
+            MyEditor.ClearEditedDocument();
+        }
+    }
+}
+```
+
+**Implementation**: Line 80-86
+
+<Note>
+This method retrieves client-side captured content, not real-time editor state. Content must be captured using `CaptureTriggerId` or JavaScript API first.
+</Note>
+
+---
+
+### ClearEditedDocument
+
+Clears the captured edited document from the hidden field.
+
+```csharp
+public void ClearEditedDocument()
+```
+
+**Behavior**:
+- Sets the hidden field value to empty string
+- Call after successfully processing captured document to prevent duplicate saves
+
+**Example**:
+```csharp
+protected void btnSave_Click(object sender, EventArgs e)
+{
+    if (MyEditor.HasEditedDocument)
+    {
+        byte[] doc = MyEditor.GetEditedDocumentBytes();
+        SaveToDatabase(doc);
+        
+        // Clear to prevent re-saving on next postback
+        MyEditor.ClearEditedDocument();
+        
+        lblMessage.Text = "Document saved successfully";
+    }
+}
+```
+
+**Implementation**: Line 88-91
+
+---
+
+## PDF Conversion Methods
+
+These methods convert documents to PDF using OnlyOffice Document Server conversion service.
+
+<Note>
+All conversion methods use retry logic with configurable attempts and delays. They communicate with the Document Server's ConvertService.ashx endpoint.
+</Note>
+
+### ConvertCurrentDocumentToPdfBytes
+
+Converts the current document (original or edited if captured) to PDF and returns the bytes.
+
+```csharp
+public byte[] ConvertCurrentDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+<ParamField path="maxAttempts" type="int" default="15">
+  Maximum number of conversion attempts. Conversion may require multiple attempts if the document is large.
+</ParamField>
+
+<ParamField path="delayMs" type="int" default="1000">
+  Delay in milliseconds between conversion attempts.
+</ParamField>
+
+**Returns**: `byte[]` - The PDF file content as a byte array.
+
+**Throws**:
+- `InvalidOperationException` - If no document is loaded (`HasDocument` is false)
+- `TimeoutException` - If conversion doesn't complete within maxAttempts
+- `InvalidOperationException` - If the Document Server returns an error
+
+**Behavior**:
+- If `HasEditedDocument` is true, converts the edited version
+- Otherwise, converts the original document
+- Delegates to `ConvertCurrentDocumentToPdfUrl` then downloads the bytes
+
+**Example**:
+```csharp
+protected void btnDownloadPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        // Convert with default settings
+        byte[] pdfBytes = MyEditor.ConvertCurrentDocumentToPdfBytes();
+        
+        // Send to browser
+        Response.Clear();
+        Response.ContentType = "application/pdf";
+        Response.AddHeader("Content-Disposition", 
+            $"attachment; filename={Path.GetFileNameWithoutExtension(MyEditor.DocumentName)}.pdf");
+        Response.BinaryWrite(pdfBytes);
+        Response.End();
+    }
+    catch (TimeoutException)
+    {
+        lblError.Text = "PDF conversion timed out. Please try again.";
+    }
+    catch (InvalidOperationException ex)
+    {
+        lblError.Text = $"Conversion failed: {ex.Message}";
+    }
+}
+
+// With custom retry settings for large documents
+protected void ConvertLargeDocument()
+{
+    byte[] pdf = MyEditor.ConvertCurrentDocumentToPdfBytes(
+        maxAttempts: 30,  // More attempts
+        delayMs: 2000     // Longer delay
+    );
+    SavePdfToArchive(pdf);
+}
+```
+
+**Implementation**: Line 209-213
+
+---
+
+### ConvertCurrentDocumentToPdfUrl
+
+Converts the current document to PDF and returns the download URL.
+
+```csharp
+public string ConvertCurrentDocumentToPdfUrl(int maxAttempts = 15, int delayMs = 1000)
+```
+
+<ParamField path="maxAttempts" type="int" default="15">
+  Maximum number of conversion attempts.
+</ParamField>
+
+<ParamField path="delayMs" type="int" default="1000">
+  Delay in milliseconds between attempts.
+</ParamField>
+
+**Returns**: `string` - Absolute URL to download the converted PDF from OnlyOffice Document Server.
+
+**Throws**: Same as `ConvertCurrentDocumentToPdfBytes`
+
+**Behavior**:
+- If `HasEditedDocument` is true, converts the edited version
+- Otherwise, converts the original document
+- Returns a temporary URL from the Document Server
+
+**Example**:
+```csharp
+protected void btnViewPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        string pdfUrl = MyEditor.ConvertCurrentDocumentToPdfUrl();
+        
+        // Redirect to PDF
+        Response.Redirect(pdfUrl);
+        
+        // Or embed in iframe
+        // iframePdf.Attributes["src"] = pdfUrl;
+    }
+    catch (Exception ex)
+    {
+        lblError.Text = $"Failed to generate PDF: {ex.Message}";
+    }
+}
+```
+
+**Implementation**: Line 133-142
+
+<Warning>
+The returned URL is temporary and hosted by the Document Server. Download or save the PDF promptly as it may expire.
+</Warning>
+
+---
+
+### ConvertEditedDocumentToPdfBytes
+
+Converts the captured edited document to PDF and returns the bytes.
+
+```csharp
+public byte[] ConvertEditedDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+<ParamField path="maxAttempts" type="int" default="15">
+  Maximum number of conversion attempts.
+</ParamField>
+
+<ParamField path="delayMs" type="int" default="1000">
+  Delay in milliseconds between attempts.
+</ParamField>
+
+**Returns**: `byte[]` - The PDF file content.
+
+**Throws**:
+- `InvalidOperationException` - If no base document is loaded
+- `InvalidOperationException` - If no edited document has been captured
+- `TimeoutException` - If conversion doesn't complete
+
+**Example**:
+```csharp
+protected void btnSaveAsPdf_Click(object sender, EventArgs e)
+{
+    if (!MyEditor.HasEditedDocument)
+    {
+        lblError.Text = "Please save your changes first (click Save button).";
+        return;
+    }
+    
+    try
+    {
+        byte[] pdfBytes = MyEditor.ConvertEditedDocumentToPdfBytes();
+        
+        // Save to database
+        SavePdfToDatabase(docId, pdfBytes);
+        
+        // Also save original edited document
+        byte[] docBytes = MyEditor.GetEditedDocumentBytes();
+        SaveDocumentToDatabase(docId, docBytes);
+        
+        MyEditor.ClearEditedDocument();
+        lblSuccess.Text = "Document and PDF saved successfully.";
+    }
+    catch (Exception ex)
+    {
+        lblError.Text = $"Error: {ex.Message}";
+    }
+}
+```
+
+**Implementation**: Line 157-161
+
+---
+
+### ConvertEditedDocumentToPdfUrl
+
+Converts the captured edited document to PDF and returns the download URL.
+
+```csharp
+public string ConvertEditedDocumentToPdfUrl(int maxAttempts = 15, int delayMs = 1000)
+```
+
+<ParamField path="maxAttempts" type="int" default="15">
+  Maximum number of conversion attempts.
+</ParamField>
+
+<ParamField path="delayMs" type="int" default="1000">
+  Delay in milliseconds between attempts.
+</ParamField>
+
+**Returns**: `string` - Absolute URL to download the converted PDF.
+
+**Throws**: Same as `ConvertEditedDocumentToPdfBytes`
+
+**Behavior**:
+- Creates a temporary document source from the edited bytes
+- Uploads to `~/App_Data/uploads/` with `_edited` suffix
+- Sends to Document Server for conversion
+- Returns the PDF download URL from Document Server
+
+**Example**:
+```csharp
+protected void btnEmailPdf_Click(object sender, EventArgs e)
+{
+    if (!MyEditor.HasEditedDocument)
+    {
+        lblError.Text = "Please capture changes first.";
+        return;
+    }
+    
+    try
+    {
+        string pdfUrl = MyEditor.ConvertEditedDocumentToPdfUrl();
+        
+        // Download PDF
+        byte[] pdfBytes;
+        using (var client = new WebClient())
+        {
+            pdfBytes = client.DownloadData(pdfUrl);
+        }
+        
+        // Send via email
+        SendEmailWithAttachment(
+            recipient: userEmail,
+            subject: "Your Document",
+            attachment: pdfBytes,
+            attachmentName: Path.GetFileNameWithoutExtension(MyEditor.DocumentName) + ".pdf"
+        );
+        
+        lblSuccess.Text = "PDF sent to " + userEmail;
+    }
+    catch (Exception ex)
+    {
+        lblError.Text = $"Failed to send PDF: {ex.Message}";
+    }
+}
+```
+
+**Implementation**: Line 144-155
+
+---
+
+## Method Summary Table
+
+| Method | Return Type | Purpose |
+|--------|-------------|----------|
+| SetDocumentFromBytes | void | Load document from byte array |
+| SetDocumentFromFile | void | Load document from server file path |
+| SetDocumentFromUpload | void | Load document using upload handler file ID |
+| GetEditedDocumentBytes | byte[] | Retrieve captured edited document bytes |
+| ClearEditedDocument | void | Clear captured edited document |
+| ConvertCurrentDocumentToPdfBytes | byte[] | Convert current document to PDF bytes |
+| ConvertCurrentDocumentToPdfUrl | string | Convert current document to PDF URL |
+| ConvertEditedDocumentToPdfBytes | byte[] | Convert edited document to PDF bytes |
+| ConvertEditedDocumentToPdfUrl | string | Convert edited document to PDF URL |
+
+## Conversion Service Details
+
+<Note>
+The conversion methods use the OnlyOffice Document Server ConvertService.ashx endpoint. The URL is automatically resolved from `OnlyOfficeApiUrl` property.
+
+**Example**: If `OnlyOfficeApiUrl` is:
+```
+https://docserver.example.com/web-apps/apps/api/documents/api.js
+```
+
+The conversion service URL becomes:
+```
+https://docserver.example.com/ConvertService.ashx
+```
+</Note>
+
+### Supported File Types
+
+The conversion service supports:
+
+**Word Processing**: docx, doc, odt, rtf, txt, html, epub, mht
+**Spreadsheets**: xlsx, xls, ods, csv
+**Presentations**: pptx, ppt, odp
+
+### Retry Logic
+
+The conversion process may require multiple attempts because:
+- Document Server processes conversions asynchronously
+- Large documents take time to convert
+- The service returns a progress percentage until complete
+
+**Conversion flow** (Line 163-207):
+1. Construct request payload with document URL, type, and key
+2. Sign with JWT token
+3. POST to ConvertService.ashx
+4. Check response:
+   - If `endConvert: true` and `fileUrl` present → Success
+   - If `error` present → Throw exception
+   - Otherwise → Retry after delay
+5. Repeat until maxAttempts reached
+
+**Example request payload**:
+```json
+{
+  "async": false,
+  "filetype": "docx",
+  "outputtype": "pdf",
+  "url": "https://app.example.com/handler.ashx?action=download&fileId=abc123",
+  "title": "Report.docx",
+  "key": "abc123def456_2024",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+<Warning>
+The Document Server must be able to access the document URL. Ensure the URL is publicly accessible or within the Document Server's network.
+</Warning>

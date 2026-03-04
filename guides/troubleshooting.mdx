@@ -1,0 +1,701 @@
+---
+title: 'Troubleshooting'
+description: 'Diagnose and resolve common issues including CORS errors, JWT mismatch, callback failures, and SSL certificate validation problems'
+---
+
+## Overview
+
+This guide covers common issues you may encounter when integrating the OnlyOffice Control and provides solutions based on the implementation details.
+
+## CORS Errors
+
+### Symptom
+
+```
+Access to XMLHttpRequest has been blocked by CORS policy: 
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+Or in the browser console:
+
+```
+CORS error when loading document from OnlyOffice server
+```
+
+### Cause
+
+CORS errors occur when:
+- The OnlyOffice Document Server cannot access your application's callback or download URLs
+- Your application and OnlyOffice server are on different domains without proper CORS headers
+- Network restrictions prevent cross-origin requests
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Configure CORS in web.config" icon="1">
+    Add CORS headers to your ASP.NET application:
+    
+    ```xml
+    <configuration>
+      <system.webServer>
+        <httpProtocol>
+          <customHeaders>
+            <add name="Access-Control-Allow-Origin" value="*" />
+            <add name="Access-Control-Allow-Methods" value="GET, POST, PUT, DELETE, OPTIONS" />
+            <add name="Access-Control-Allow-Headers" value="Content-Type, Authorization" />
+          </customHeaders>
+        </httpProtocol>
+      </system.webServer>
+    </configuration>
+    ```
+    
+    <Warning>
+    Using `value="*"` allows all origins. In production, specify your OnlyOffice server domain:
+    ```xml
+    <add name="Access-Control-Allow-Origin" value="https://docserver.example.com" />
+    ```
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="Solution 2: Verify PublicBaseUrl is Accessible" icon="2">
+    Ensure your `PublicBaseUrl` is reachable from the OnlyOffice server:
+    
+    ```csharp
+    // Make sure this URL is publicly accessible
+    docEditor.PublicBaseUrl = "https://yourapp.example.com";
+    ```
+    
+    Test accessibility:
+    ```bash
+    # From the OnlyOffice server
+    curl https://yourapp.example.com/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=test
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Use Proxy Handler" icon="3">
+    The control includes a proxy handler (`OnlyOfficeHandler.ashx.cs:111-149`) to bypass CORS issues:
+    
+    ```csharp
+    // Proxy is automatically configured
+    var proxyUrl = ResolveUrl("~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=proxy&url=");
+    ```
+    
+    Ensure the proxy script is registered (`OnlyOfficeEditor.ascx.cs:445-451`).
+  </Accordion>
+</AccordionGroup>
+
+## JWT Token Mismatch
+
+### Symptom
+
+```
+Editor shows error: "Invalid JWT token"
+```
+
+Or:
+
+```
+OnlyOffice server returns 403 Forbidden
+```
+
+### Cause
+
+JWT token mismatch occurs when:
+- The `JwtSecret` in your application doesn't match the OnlyOffice server configuration
+- JWT token generation is incorrect
+- Token has expired or is malformed
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Verify JWT Secret Matches" icon="key">
+    The secret must match exactly on both sides.
+    
+    **Your Application** (`OnlyOfficeEditor.ascx.cs:48`):
+    ```csharp
+    docEditor.JwtSecret = "your_secret_key";
+    ```
+    
+    **OnlyOffice Server** (`local.json`):
+    ```json
+    {
+      "services": {
+        "CoAuthoring": {
+          "secret": {
+            "inbox": {
+              "string": "your_secret_key"
+            },
+            "outbox": {
+              "string": "your_secret_key"
+            }
+          }
+        }
+      }
+    }
+    ```
+    
+    <Tip>
+    Restart the OnlyOffice Document Server after changing the JWT secret:
+    ```bash
+    supervisorctl restart all
+    ```
+    </Tip>
+  </Accordion>
+  
+  <Accordion title="Solution 2: Verify JWT Implementation" icon="code">
+    The control uses HS256 algorithm (`OnlyOfficeJwt.cs:9-25`):
+    
+    ```csharp
+    var headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    var header = Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
+    var payload = Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
+    var unsignedToken = header + "." + payload;
+    
+    using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret)))
+    {
+        var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(unsignedToken));
+        var signature = Base64UrlEncode(signatureBytes);
+        return unsignedToken + "." + signature;
+    }
+    ```
+    
+    Test your JWT generation at [jwt.io](https://jwt.io) to verify it's correct.
+  </Accordion>
+  
+  <Accordion title="Solution 3: Check Token in Configuration" icon="wrench">
+    The token is included in the editor configuration (`OnlyOfficeEditor.ascx.cs:289`):
+    
+    ```csharp
+    var json = serializer.Serialize(config);
+    var token = OnlyOfficeJwt.Create(json, JwtSecret);
+    ```
+    
+    Debug by logging the generated token:
+    ```csharp
+    var token = OnlyOfficeJwt.Create(json, JwtSecret);
+    System.Diagnostics.Debug.WriteLine("Generated JWT: " + token);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Callback Failures
+
+### Symptom
+
+```
+Document changes are not being saved
+```
+
+Or:
+
+```
+OnlyOffice server shows callback error in logs
+```
+
+### Cause
+
+Callback failures occur when:
+- The callback URL is not accessible from the OnlyOffice server
+- The callback handler returns an error response
+- Network firewall blocks the callback request
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Verify Callback URL" icon="link">
+    The callback URL is generated in `SetDocumentFromBytes` (`OnlyOfficeEditor.ascx.cs:109-110`):
+    
+    ```csharp
+    CallbackUrl = BuildAbsoluteUrl(
+        "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=callback&fileId=" + 
+        HttpUtility.UrlEncode(fileId));
+    ```
+    
+    Test the callback URL:
+    ```bash
+    # From OnlyOffice server
+    curl -X POST https://yourapp.example.com/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=callback&fileId=test \
+      -H "Content-Type: application/json" \
+      -d '{"status":2,"url":"https://example.com/test.docx"}'
+    ```
+    
+    Expected response:
+    ```json
+    {"error":0}
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 2: Check Callback Handler Logic" icon="code">
+    Review the callback implementation (`OnlyOfficeHandler.ashx.cs:71-109`):
+    
+    ```csharp
+    var payload = serializer.Deserialize<OnlyOfficeCallbackPayload>(body);
+    
+    // Only process status 2 (ready to save) or 6 (force save)
+    if (payload != null && 
+        (payload.status == 2 || payload.status == 6) && 
+        !string.IsNullOrWhiteSpace(payload.url) && 
+        !string.IsNullOrWhiteSpace(currentPath))
+    {
+        // Download and save document
+    }
+    ```
+    
+    Add logging to debug:
+    ```csharp
+    try
+    {
+        System.Diagnostics.Debug.WriteLine($"Callback received: Status={payload.status}, URL={payload.url}");
+        // ... rest of callback logic
+    }
+    catch (Exception ex)
+    {
+        System.Diagnostics.Debug.WriteLine($"Callback error: {ex.Message}");
+        responseObj = new { error = 1 };
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Verify File Permissions" icon="folder">
+    Ensure the App_Data/uploads directory is writable:
+    
+    ```csharp
+    private static string UploadsPath(HttpContext ctx)
+    {
+        var path = ctx.Server.MapPath("~/App_Data/uploads");
+        Directory.CreateDirectory(path); // Creates if doesn't exist
+        return path;
+    }
+    ```
+    
+    Check Windows permissions:
+    - Right-click `App_Data` folder
+    - Properties → Security
+    - Ensure IIS_IUSRS or application pool identity has Write permissions
+  </Accordion>
+  
+  <Accordion title="Solution 4: Callback Status Codes" icon="list">
+    Understand OnlyOffice callback status codes:
+    
+    | Status | Description | Handler Action |
+    |--------|-------------|----------------|
+    | 0 | Document not found | No action |
+    | 1 | Document being edited | No action |
+    | 2 | **Document ready for saving** | **Download and save** |
+    | 3 | Document saving error | Log error |
+    | 4 | Document closed (no changes) | No action |
+    | 6 | **Force save** | **Download and save** |
+    | 7 | Error force saving | Log error |
+    
+    The handler only processes status 2 and 6 (`OnlyOfficeHandler.ashx.cs:89`).
+  </Accordion>
+</AccordionGroup>
+
+## SSL Certificate Validation
+
+### Symptom
+
+```
+The remote certificate is invalid according to the validation procedure
+```
+
+Or:
+
+```
+SSL/TLS handshake failed
+```
+
+### Cause
+
+SSL errors occur when:
+- Self-signed certificates are used in development
+- Certificate chain is incomplete
+- Certificate has expired
+
+### Current Implementation
+
+<Warning>
+The control currently disables SSL validation for all connections:
+</Warning>
+
+```csharp
+ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                       SecurityProtocolType.Tls11 | 
+                                       SecurityProtocolType.Tls;
+```
+
+This appears in multiple locations:
+- `OnlyOfficeHandler.ashx.cs:91` (Callback handler)
+- `OnlyOfficeHandler.ashx.cs:128` (Proxy handler)
+- `OnlyOfficeEditor.ascx.cs:217` (Download handler)
+- `OnlyOfficeEditor.ascx.cs:309` (Convert service)
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Use Valid SSL Certificates (Production)" icon="certificate">
+    For production environments, use properly signed certificates:
+    
+    1. Obtain SSL certificate from a trusted CA (Let's Encrypt, DigiCert, etc.)
+    2. Install certificate on both servers
+    3. Remove the certificate validation bypass:
+    
+    ```csharp
+    // Remove this line in production
+    // ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+    
+    // Use only TLS 1.2
+    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 2: Conditional Validation (Development)" icon="code">
+    Make SSL validation bypass conditional:
+    
+    ```csharp
+    private static void ConfigureSecurityProtocol()
+    {
+        // Only bypass in development
+        if (System.Web.HttpContext.Current.IsDebuggingEnabled)
+        {
+            ServicePointManager.ServerCertificateValidationCallback = 
+                delegate { return true; };
+        }
+        
+        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Trust Specific Certificates" icon="shield">
+    Trust only specific certificate thumbprints:
+    
+    ```csharp
+    private static bool ValidateServerCertificate(
+        object sender,
+        X509Certificate certificate,
+        X509Chain chain,
+        SslPolicyErrors sslPolicyErrors)
+    {
+        // Allow specific certificate thumbprints
+        var allowedThumbprints = new[] 
+        {
+            "YOUR_CERT_THUMBPRINT_HERE"
+        };
+        
+        if (certificate == null)
+            return false;
+        
+        var cert = new X509Certificate2(certificate);
+        return allowedThumbprints.Contains(cert.Thumbprint);
+    }
+    
+    // Usage
+    ServicePointManager.ServerCertificateValidationCallback = ValidateServerCertificate;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Document Not Loading
+
+### Symptom
+
+```
+Editor shows: "Document not found"
+```
+
+Or editor container remains empty.
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Verify Document is Loaded" icon="check">
+    Check if document is properly loaded:
+    
+    ```csharp
+    if (!docEditor.HasDocument)
+    {
+        litStatus.Text = "No document loaded";
+        return;
+    }
+    
+    // Check properties
+    Debug.WriteLine($"DocumentName: {docEditor.DocumentName}");
+    Debug.WriteLine($"DocumentKey: {docEditor.DocumentKey}");
+    Debug.WriteLine($"DocumentUrl: {docEditor.DocumentUrl}");
+    Debug.WriteLine($"CallbackUrl: {docEditor.CallbackUrl}");
+    ```
+    
+    The `HasDocument` property checks (`OnlyOfficeEditor.ascx.cs:70-73`):
+    ```csharp
+    public bool HasDocument =>
+        !string.IsNullOrWhiteSpace(DocumentUrl)
+        && !string.IsNullOrWhiteSpace(DocumentName)
+        && !string.IsNullOrWhiteSpace(DocumentKey);
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 2: Check File Storage" icon="folder">
+    Verify the file exists in storage:
+    
+    ```csharp
+    var fileId = "your_file_id";
+    var uploadsDir = Server.MapPath("~/App_Data/uploads");
+    var files = Directory.GetFiles(uploadsDir, fileId + ".*");
+    
+    if (files.Length == 0)
+    {
+        Debug.WriteLine("File not found in storage");
+    }
+    else
+    {
+        Debug.WriteLine($"File found: {files[0]}");
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Test Document URL" icon="link">
+    Access the document URL directly:
+    
+    ```bash
+    curl https://yourapp.example.com/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=YOUR_FILE_ID
+    ```
+    
+    Should download the file. If it returns 404, the file is not in storage.
+  </Accordion>
+</AccordionGroup>
+
+## Conversion Failures
+
+### Symptom
+
+```
+TimeoutException: La conversión a PDF no terminó dentro del tiempo esperado.
+```
+
+Or:
+
+```
+InvalidOperationException: ConvertService devolvió error=...
+```
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Increase Retry Attempts" icon="rotate">
+    Increase conversion retry parameters (`OnlyOfficeEditor.ascx.cs:133-142`):
+    
+    ```csharp
+    // Default: 15 attempts, 1000ms delay
+    byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+    
+    // Extended: 30 attempts, 2000ms delay
+    byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+        maxAttempts: 30,
+        delayMs: 2000
+    );
+    ```
+    
+    <Tip>
+    Large documents may take longer to convert. Monitor OnlyOffice server logs to see actual conversion time.
+    </Tip>
+  </Accordion>
+  
+  <Accordion title="Solution 2: Verify Conversion Service URL" icon="link">
+    The conversion URL is derived from API URL (`OnlyOfficeEditor.ascx.cs:298-305`):
+    
+    ```csharp
+    var root = apiUri.GetLeftPart(UriPartial.Authority);
+    var convertUrl = root.TrimEnd('/') + "/ConvertService.ashx";
+    ```
+    
+    Verify it's accessible:
+    ```bash
+    curl https://docserver.example.com/ConvertService.ashx
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Check Conversion Response" icon="code">
+    Add logging to parse response (`OnlyOfficeEditor.ascx.cs:351-388`):
+    
+    ```csharp
+    private static ConvertServiceResult ParseConvertServiceResult(string json)
+    {
+        System.Diagnostics.Debug.WriteLine($"Conversion response: {json}");
+        
+        var result = new ConvertServiceResult();
+        // ... rest of parsing logic
+        
+        if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            System.Diagnostics.Debug.WriteLine($"Conversion error: {result.ErrorMessage}");
+        }
+        
+        return result;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 4: Document URL Must Be Accessible" icon="globe">
+    The OnlyOffice server must be able to access your document URL:
+    
+    ```csharp
+    // Ensure PublicBaseUrl is accessible from OnlyOffice server
+    docEditor.PublicBaseUrl = "https://yourapp.example.com";
+    ```
+    
+    Test from OnlyOffice server:
+    ```bash
+    curl https://yourapp.example.com/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=TEST
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Editor Not Initializing
+
+### Symptom
+
+Editor container div is visible but OnlyOffice editor doesn't load.
+
+### Solutions
+
+<AccordionGroup>
+  <Accordion title="Solution 1: Check JavaScript Console" icon="browser">
+    Open browser developer tools (F12) and check console for errors:
+    
+    - **DocsAPI is not defined**: OnlyOffice API script not loaded
+    - **Configuration error**: Invalid configuration JSON
+    - **Network errors**: Can't reach OnlyOffice server
+  </Accordion>
+  
+  <Accordion title="Solution 2: Verify Scripts are Registered" icon="code">
+    The control registers scripts in `Page_PreRender` (`OnlyOfficeEditor.ascx.cs:257-261`):
+    
+    ```csharp
+    protected void Page_PreRender(object sender, EventArgs e)
+    {
+        ConfigJson = HasDocument ? BuildConfigJson() : "null";
+        RegisterTriggerScripts();
+    }
+    ```
+    
+    Ensure `Page_PreRender` is firing by adding debug output:
+    ```csharp
+    System.Diagnostics.Debug.WriteLine($"ConfigJson: {ConfigJson}");
+    ```
+  </Accordion>
+  
+  <Accordion title="Solution 3: Check OnlyOffice API URL" icon="link">
+    Verify the API URL is correct and accessible (`OnlyOfficeEditor.ascx.cs:44`):
+    
+    ```csharp
+    docEditor.OnlyOfficeApiUrl = "https://docserver.example.com/web-apps/apps/api/documents/api.js";
+    ```
+    
+    Test in browser:
+    ```
+    https://docserver.example.com/web-apps/apps/api/documents/api.js
+    ```
+    
+    Should return JavaScript code defining `DocsAPI`.
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+### Symptom
+
+Slow document loading, editor lag, or timeout errors.
+
+### Solutions
+
+<Steps>
+
+### Optimize File Storage
+
+Implement cleanup for old temporary files:
+
+```csharp
+private void CleanupOldTempFiles()
+{
+    var uploadsDir = Server.MapPath("~/App_Data/uploads");
+    var files = Directory.GetFiles(uploadsDir);
+    var cutoffDate = DateTime.Now.AddDays(-7);
+    
+    foreach (var file in files)
+    {
+        var fileInfo = new FileInfo(file);
+        if (fileInfo.LastAccessTime < cutoffDate)
+        {
+            try { File.Delete(file); }
+            catch { /* Log error */ }
+        }
+    }
+}
+```
+
+### Enable Output Caching
+
+Cache static resources in web.config:
+
+```xml
+<system.webServer>
+  <staticContent>
+    <clientCache cacheControlMode="UseMaxAge" cacheControlMaxAge="7.00:00:00" />
+  </staticContent>
+</system.webServer>
+```
+
+### Monitor Network Latency
+
+Add timing to conversion operations:
+
+```csharp
+var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+stopwatch.Stop();
+System.Diagnostics.Debug.WriteLine($"Conversion took {stopwatch.ElapsedMilliseconds}ms");
+```
+
+</Steps>
+
+## Debugging Checklist
+
+When troubleshooting issues, verify:
+
+- [ ] `OnlyOfficeApiUrl` is correct and accessible
+- [ ] `JwtSecret` matches OnlyOffice server configuration
+- [ ] `PublicBaseUrl` is accessible from OnlyOffice server
+- [ ] Document is loaded (`HasDocument` returns true)
+- [ ] File exists in `App_Data/uploads` directory
+- [ ] Callback URL is reachable from OnlyOffice server
+- [ ] CORS headers are configured if cross-domain
+- [ ] SSL certificates are valid (or validation is bypassed)
+- [ ] JavaScript console shows no errors
+- [ ] OnlyOffice server logs show no errors
+
+## Getting Help
+
+If issues persist:
+
+1. **Check OnlyOffice Server Logs**: Located in `/var/log/onlyoffice/documentserver/`
+2. **Enable Debug Logging**: Add debug output to handler methods
+3. **Test with Sample Document**: Verify the issue isn't document-specific
+4. **Network Diagnostics**: Use `curl` to test all endpoints
+5. **Verify Versions**: Ensure OnlyOffice Document Server version is compatible
+
+<Card title="OnlyOffice Community" icon="comments" href="https://forum.onlyoffice.com/">
+  Get support from the OnlyOffice community forum
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Usage" icon="book" href="/guides/basic-usage">
+    Review basic implementation
+  </Card>
+  <Card title="Advanced Configuration" icon="gear" href="/guides/advanced-configuration">
+    Fine-tune your configuration
+  </Card>
+</CardGroup>

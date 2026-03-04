@@ -1,0 +1,342 @@
+---
+title: Document Types
+description: Supported document formats and how OnlyOffice categorizes them for the appropriate editor
+---
+
+## Overview
+
+OnlyOffice Document Server provides three specialized editors for different document types:
+- **Word Processor** - Text documents
+- **Spreadsheet** - Workbooks and data tables  
+- **Presentation** - Slide decks
+
+The OnlyOffice Control library automatically detects the document type based on file extension and loads the appropriate editor.
+
+## Supported Formats
+
+### Word Processor Documents (`word`)
+
+The word processor handles text documents and is the default editor.
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| Microsoft Word | `.doc`, `.docx` | Modern and legacy Word formats |
+| OpenDocument Text | `.odt` | Open standard text format |
+| Rich Text Format | `.rtf` | Cross-platform rich text |
+| Plain Text | `.txt` | Unformatted text files |
+
+<Note>
+  The word processor is used as the **fallback** for any unrecognized file types.
+</Note>
+
+### Spreadsheet Documents (`cell`)
+
+The spreadsheet editor handles workbooks with formulas, charts, and data analysis.
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| Microsoft Excel | `.xls`, `.xlsx` | Modern and legacy Excel formats |
+| OpenDocument Spreadsheet | `.ods` | Open standard spreadsheet format |
+| Comma-Separated Values | `.csv` | Plain text data tables |
+
+### Presentation Documents (`slide`)
+
+The presentation editor handles slide decks with multimedia and transitions.
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| Microsoft PowerPoint | `.ppt`, `.pptx` | Modern and legacy PowerPoint formats |
+| OpenDocument Presentation | `.odp` | Open standard presentation format |
+
+## Document Type Resolution
+
+The library uses the `ResolveDocumentType` method to map file extensions to OnlyOffice editor types:
+
+```csharp OnlyOfficeEditor.ascx.cs:411-427
+private static string ResolveDocumentType(string fileType)
+{
+    switch ((fileType ?? "").ToLowerInvariant())
+    {
+        case "xls":
+        case "xlsx":
+        case "ods":
+        case "csv":
+            return "cell";
+        case "ppt":
+        case "pptx":
+        case "odp":
+            return "slide";
+        default:
+            return "word";
+    }
+}
+```
+
+<Accordion title="How it works">
+  1. Extracts file extension from `DocumentName`
+  2. Converts extension to lowercase for case-insensitive matching
+  3. Returns the appropriate OnlyOffice document type identifier:
+     - `cell` for spreadsheets
+     - `slide` for presentations
+     - `word` for text documents (default)
+  4. Includes the type in the editor configuration JSON
+</Accordion>
+
+## Document Type in Configuration
+
+The resolved document type is included in the editor initialization configuration:
+
+```csharp OnlyOfficeEditor.ascx.cs:263-296
+private string BuildConfigJson()
+{
+    var ext = Path.GetExtension(DocumentName);
+    var fileType = string.IsNullOrWhiteSpace(ext) ? "" : ext.TrimStart('.');
+
+    var config = new
+    {
+        document = new
+        {
+            fileType,  // Raw extension ("docx", "xlsx", etc.)
+            key = DocumentKey,
+            title = DocumentName,
+            url = DocumentUrl
+        },
+        documentType = ResolveDocumentType(fileType),  // Editor type ("word", "cell", "slide")
+        editorConfig = new
+        {
+            callbackUrl = CallbackUrl ?? "",
+            mode = Mode ?? "edit",
+            lang = Lang ?? "es",
+            user = new { id = UserId ?? "1", name = UserDisplayName ?? "Usuario" }
+        }
+    };
+    
+    // ... JWT token creation
+}
+```
+
+## Format Compatibility
+
+### Read and Edit Support
+
+Most formats support both reading and editing:
+
+```csharp
+// Edit a Word document
+docEditor.SetDocumentFromFile("report.docx");
+docEditor.Mode = "edit";
+
+// Edit an Excel spreadsheet
+docEditor.SetDocumentFromFile("budget.xlsx");
+
+// Edit a PowerPoint presentation
+docEditor.SetDocumentFromFile("slides.pptx");
+```
+
+### View-Only Mode
+
+Some formats or scenarios may require view-only access:
+
+```csharp
+docEditor.SetDocumentFromFile("contract.pdf");
+docEditor.Mode = "view";  // Read-only mode
+```
+
+### Legacy Format Limitations
+
+<Warning>
+  **Legacy Format Considerations:**
+  
+  - `.doc`, `.xls`, `.ppt` files may have limited feature support
+  - Complex formatting might not fully preserve during editing
+  - Consider converting legacy formats to modern formats (.docx, .xlsx, .pptx) for best results
+</Warning>
+
+## Document Conversion
+
+The library supports converting documents to PDF regardless of the source format:
+
+```csharp OnlyOfficeEditor.ascx.cs:163-207
+private string ConvertDocumentSourceToPdfUrl(string sourceUrl, string sourceName, string sourceKey, int maxAttempts, int delayMs)
+{
+    // Extract extension for conversion service
+    var sourceExt = Path.GetExtension(sourceName)?.TrimStart('.').ToLowerInvariant();
+    if (string.IsNullOrWhiteSpace(sourceExt))
+        throw new InvalidOperationException("No fue posible determinar el tipo del documento.");
+
+    var convertServiceUrl = ResolveConvertServiceUrl();
+    var serializer = new JavaScriptSerializer();
+    
+    var requestPayload = new Dictionary<string, object>
+    {
+        ["async"] = false,
+        ["filetype"] = sourceExt,  // Source format
+        ["outputtype"] = "pdf",    // Target format
+        ["url"] = sourceUrl,
+        ["title"] = Path.GetFileName(sourceName),
+        ["key"] = sourceKey
+    };
+    
+    // ... JWT signing and API call
+}
+```
+
+### Supported Conversion Sources
+
+All supported document types can be converted to PDF:
+
+```csharp
+// Convert Word to PDF
+docEditor.SetDocumentFromFile("document.docx");
+var pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+
+// Convert Excel to PDF
+docEditor.SetDocumentFromFile("spreadsheet.xlsx");
+var pdfUrl = docEditor.ConvertCurrentDocumentToPdfUrl();
+
+// Convert PowerPoint to PDF
+docEditor.SetDocumentFromFile("presentation.pptx");
+var pdfBytes = docEditor.ConvertEditedDocumentToPdfBytes();
+```
+
+## Adding Custom Format Support
+
+To extend support for additional formats, modify the `ResolveDocumentType` method:
+
+```csharp
+private static string ResolveDocumentType(string fileType)
+{
+    switch ((fileType ?? "").ToLowerInvariant())
+    {
+        // Spreadsheets
+        case "xls":
+        case "xlsx":
+        case "ods":
+        case "csv":
+        case "xlsm":  // Add macro-enabled Excel
+            return "cell";
+        
+        // Presentations
+        case "ppt":
+        case "pptx":
+        case "odp":
+        case "pptm":  // Add macro-enabled PowerPoint
+            return "slide";
+        
+        // Word documents (default)
+        default:
+            return "word";
+    }
+}
+```
+
+<Note>
+  Ensure the OnlyOffice Document Server supports any custom formats you add. Check the [OnlyOffice format compatibility matrix](https://api.onlyoffice.com/editors/formats) for details.
+</Note>
+
+## File Extension Detection
+
+The library extracts file extensions in the configuration builder:
+
+```csharp OnlyOfficeEditor.ascx.cs:265-266
+var ext = Path.GetExtension(DocumentName);
+var fileType = string.IsNullOrWhiteSpace(ext) ? "" : ext.TrimStart('.');
+```
+
+### Handling Missing Extensions
+
+If no extension is detected:
+- The `fileType` is set to an empty string
+- `ResolveDocumentType` returns `"word"` (default fallback)
+- OnlyOffice attempts to open the file with the word processor
+
+```csharp
+// Without extension - defaults to word processor
+docEditor.DocumentName = "MyDocument";  // No extension
+docEditor.DocumentUrl = "https://example.com/download/file123";
+```
+
+<Warning>
+  Always include file extensions in `DocumentName` for proper editor selection:
+  
+  ```csharp
+  // Good
+  docEditor.SetDocumentFromBytes(data, "report.xlsx");
+  
+  // Bad - may open with wrong editor
+  docEditor.SetDocumentFromBytes(data, "report");
+  ```
+</Warning>
+
+## Example: Working with Different Document Types
+
+```csharp
+protected void LoadDocument(string filePath)
+{
+    var ext = Path.GetExtension(filePath).ToLowerInvariant();
+    
+    docEditor.SetDocumentFromFile(filePath);
+    
+    // Configure based on document type
+    switch (ext)
+    {
+        case ".xlsx":
+        case ".xls":
+            docEditor.EditorHeight = "700px";  // More height for spreadsheets
+            lblDocType.Text = "Spreadsheet Editor";
+            break;
+            
+        case ".pptx":
+        case ".ppt":
+            docEditor.EditorHeight = "600px";  // Presentation aspect ratio
+            lblDocType.Text = "Presentation Editor";
+            break;
+            
+        default:
+            docEditor.EditorHeight = "520px";  // Standard document height
+            lblDocType.Text = "Document Editor";
+            break;
+    }
+}
+```
+
+## Troubleshooting Format Issues
+
+### Wrong Editor Opens
+
+**Symptom**: Excel file opens in Word editor
+
+**Solution**: Verify the file extension is properly set:
+
+```csharp
+// Check the DocumentName property
+System.Diagnostics.Debug.WriteLine("Document: " + docEditor.DocumentName);
+System.Diagnostics.Debug.WriteLine("Extension: " + Path.GetExtension(docEditor.DocumentName));
+```
+
+### Format Not Supported Error
+
+**Symptom**: OnlyOffice shows "Format not supported" error
+
+**Possible Causes**:
+1. File extension not recognized by OnlyOffice
+2. File is corrupted or not actually the claimed format
+3. OnlyOffice Document Server doesn't have format support installed
+
+**Solution**: Verify file integrity and OnlyOffice server configuration
+
+### Conversion Failures
+
+**Symptom**: PDF conversion fails for specific formats
+
+**Solution**: Check OnlyOffice conversion service logs:
+
+```bash
+sudo tail -f /var/log/onlyoffice/documentserver/converter/out.log
+```
+
+## Related Topics
+
+- [Configuration Properties](/concepts/configuration) - Set up document properties
+- [Callback Handling](/concepts/callback-handling) - Handle document save events
+- [JWT Authentication](/concepts/jwt-authentication) - Secure document access

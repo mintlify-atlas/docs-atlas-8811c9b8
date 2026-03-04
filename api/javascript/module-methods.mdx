@@ -1,0 +1,595 @@
+---
+title: 'Module Methods'
+description: 'Complete reference for all OnlyOfficeEditorModule JavaScript methods'
+icon: 'function'
+---
+
+## init()
+
+Initializes a new OnlyOffice editor instance in the specified container.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.init(containerId, config, options)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the DOM element that will host the editor iframe. The element must exist in the DOM before calling this method.
+</ParamField>
+
+<ParamField path="config" type="object" required>
+  OnlyOffice Document Server configuration object. Must include at minimum `document.url`.
+  
+  ```javascript
+  {
+    document: {
+      fileType: 'docx',
+      key: 'unique-key',
+      title: 'Document.docx',
+      url: 'https://example.com/doc.docx'
+    },
+    documentType: 'word',
+    editorConfig: { /* optional */ }
+  }
+  ```
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional callbacks and configuration.
+  
+  <Expandable title="options properties">
+    <ResponseField name="onReady" type="function">
+      Called when the editor application is initialized and ready (maps to `onAppReady` event).
+    </ResponseField>
+    
+    <ResponseField name="onDocumentReady" type="function">
+      Called when the document has been loaded in the editor.
+    </ResponseField>
+    
+    <ResponseField name="onError" type="function">
+      Called when an error occurs. Receives an error event object.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="DocEditor | null">
+  Returns the OnlyOffice `DocEditor` instance if successful, or `null` if initialization failed (e.g., invalid config or DocsAPI not loaded).
+</ResponseField>
+
+### Behavior
+
+- If an editor already exists for the given `containerId`, it will be destroyed first
+- Sets default customization options if not provided
+- Shows a loading indicator during initialization
+- Automatically hides loading indicator after 8 seconds as fallback
+
+### Default Customization
+
+The following defaults are applied if not specified in `config.editorConfig.customization`:
+
+| Property | Default Value |
+|----------|---------------|
+| `uiTheme` | `'theme-classic-light'` |
+| `compactToolbar` | `false` |
+| `toolbarNoTabs` | `false` |
+| `hideRightMenu` | `true` |
+| `hideRulers` | `true` |
+| `review.showReviewChanges` | `false` |
+
+### Example
+
+```javascript
+var config = {
+    document: {
+        fileType: 'xlsx',
+        key: 'spreadsheet-123',
+        title: 'Sales Report.xlsx',
+        url: 'https://example.com/sales.xlsx'
+    },
+    documentType: 'cell',
+    editorConfig: {
+        mode: 'edit',
+        customization: {
+            uiTheme: 'theme-dark',
+            compactToolbar: true
+        }
+    }
+};
+
+var options = {
+    onReady: function() {
+        console.log('Editor initialized');
+    },
+    onDocumentReady: function() {
+        console.log('Document loaded');
+    },
+    onError: function(evt) {
+        console.error('Editor error:', evt.data);
+        alert('Failed to load editor');
+    }
+};
+
+var editor = OnlyOfficeEditorModule.init('editorContainer', config, options);
+
+if (editor) {
+    console.log('Editor created successfully');
+} else {
+    console.error('Failed to create editor');
+}
+```
+
+<Warning>
+The `config.document.url` must be accessible from the OnlyOffice Document Server. Make sure CORS and network policies allow access.
+</Warning>
+
+---
+
+## getEditedDocumentUrl()
+
+Retrieves the download URL for the edited document from OnlyOffice Document Server.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.getEditedDocumentUrl(containerId)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the editor container.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="Promise<string>">
+  A Promise that resolves with the download URL string, or rejects with an error.
+</ResponseField>
+
+### Behavior
+
+- Triggers the `downloadAs()` method on the OnlyOffice editor
+- Shows loading indicator during the operation
+- Waits for the `onDownloadAs` event from OnlyOffice
+- Has a 30-second timeout
+- Rejects if editor is not initialized
+
+### Example
+
+```javascript
+OnlyOfficeEditorModule.getEditedDocumentUrl('editorContainer')
+    .then(function(url) {
+        console.log('Document URL:', url);
+        // Download the file
+        window.location.href = url;
+    })
+    .catch(function(error) {
+        console.error('Failed to get document URL:', error);
+        alert('Could not retrieve document');
+    });
+```
+
+### With Async/Await
+
+```javascript
+async function downloadDocument() {
+    try {
+        var url = await OnlyOfficeEditorModule.getEditedDocumentUrl('editorContainer');
+        console.log('Document available at:', url);
+        return url;
+    } catch (error) {
+        console.error('Download failed:', error);
+        throw error;
+    }
+}
+```
+
+<Note>
+This method triggers a server-side conversion/save operation in OnlyOffice Document Server. The URL is temporary and typically expires after a short period.
+</Note>
+
+---
+
+## getEditedDocumentBlob()
+
+Retrieves the edited document as a `Blob` object, ready for upload or processing.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.getEditedDocumentBlob(containerId)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the editor container.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="Promise<Blob>">
+  A Promise that resolves with a `Blob` object containing the document binary data, or rejects with an error.
+</ResponseField>
+
+### Behavior
+
+- First calls `getEditedDocumentUrl()` to get the download URL
+- Fetches the document content using the Fetch API
+- Returns the response as a Blob
+- Supports proxy URL configuration via `window.__onlyOfficeProxyUrl`
+
+### Proxy Support
+
+If `window.__onlyOfficeProxyUrl` is defined, the module will route the download through a proxy:
+
+```javascript
+// Set proxy before calling getEditedDocumentBlob
+window.__onlyOfficeProxyUrl = '/api/proxy?url=';
+
+OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer')
+    .then(function(blob) {
+        console.log('Document blob size:', blob.size, 'bytes');
+    });
+```
+
+### Example: Save to Disk
+
+```javascript
+OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer')
+    .then(function(blob) {
+        // Create download link
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'edited-document.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    })
+    .catch(function(error) {
+        console.error('Failed to get document blob:', error);
+    });
+```
+
+### Example: Upload via FormData
+
+```javascript
+async function uploadEditedDocument() {
+    try {
+        var blob = await OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer');
+        
+        var formData = new FormData();
+        formData.append('file', blob, 'document.docx');
+        
+        var response = await fetch('/api/documents/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            console.log('Document uploaded successfully');
+        }
+    } catch (error) {
+        console.error('Upload failed:', error);
+    }
+}
+```
+
+<Tip>
+Use `getEditedDocumentBlob()` instead of `getEditedDocumentUrl()` when you need to process the document content in JavaScript or upload it to your server.
+</Tip>
+
+---
+
+## captureToHiddenField()
+
+Captures the edited document and stores it as base64-encoded data in a hidden form field. Optionally triggers ASP.NET postback.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.captureToHiddenField(containerId, hiddenFieldId, options)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the editor container.
+</ParamField>
+
+<ParamField path="hiddenFieldId" type="string" required>
+  The ID of the hidden input field where the base64 data will be stored.
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional configuration for the capture operation.
+  
+  <Expandable title="options properties">
+    <ResponseField name="onCaptured" type="function">
+      Callback invoked after successful capture. Receives the base64 string as parameter.
+    </ResponseField>
+    
+    <ResponseField name="onError" type="function">
+      Callback invoked on error. Receives the error object as parameter.
+    </ResponseField>
+    
+    <ResponseField name="autoPostBack" type="boolean">
+      If `true`, automatically triggers ASP.NET postback after capture. Requires `__doPostBack` to be available.
+    </ResponseField>
+    
+    <ResponseField name="postBackTarget" type="string">
+      The target control ID for postback (first parameter to `__doPostBack`).
+    </ResponseField>
+    
+    <ResponseField name="postBackArgument" type="string">
+      The argument for postback (second parameter to `__doPostBack`).
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="Promise<string>">
+  A Promise that resolves with the base64-encoded document string, or rejects with an error.
+</ResponseField>
+
+### Behavior
+
+1. Calls `getEditedDocumentBlob()` to retrieve the document
+2. Converts the Blob to base64 using FileReader
+3. Sets the value of the hidden field to the base64 string
+4. Optionally triggers postback and destroys the editor
+5. Disables `beforeunload` warnings if postback is triggered
+
+### Example: Basic Capture
+
+```html
+<input type="hidden" id="hdnDocument" runat="server" />
+```
+
+```javascript
+OnlyOfficeEditorModule.captureToHiddenField('editorContainer', 'hdnDocument', {
+    onCaptured: function(base64) {
+        console.log('Document captured, size:', base64.length, 'characters');
+        alert('Document saved!');
+    },
+    onError: function(error) {
+        console.error('Capture failed:', error);
+        alert('Failed to save document');
+    }
+});
+```
+
+### Example: With ASP.NET Postback
+
+```javascript
+function saveDocument() {
+    OnlyOfficeEditorModule.captureToHiddenField(
+        'editorContainer',
+        '<%= hdnDocumentContent.ClientID %>',
+        {
+            autoPostBack: true,
+            postBackTarget: '<%= btnSave.UniqueID %>',
+            postBackArgument: '',
+            onCaptured: function(base64) {
+                console.log('Triggering postback...');
+            },
+            onError: function(error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    );
+}
+```
+
+### Server-Side (ASP.NET)
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    if (IsPostBack)
+    {
+        string base64Content = hdnDocumentContent.Value;
+        if (!string.IsNullOrEmpty(base64Content))
+        {
+            byte[] documentBytes = Convert.FromBase64String(base64Content);
+            // Save to database, file system, etc.
+            SaveDocument(documentBytes);
+        }
+    }
+}
+```
+
+<Warning>
+Base64 encoding increases the data size by approximately 33%. Large documents may exceed POST size limits. Consider using `getEditedDocumentBlob()` with AJAX for larger files.
+</Warning>
+
+<Note>
+When `autoPostBack` is `true`, the editor instance is automatically destroyed before postback to prevent confirmation dialogs.
+</Note>
+
+---
+
+## getEditor()
+
+Retrieves the underlying OnlyOffice `DocEditor` instance for advanced operations.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.getEditor(containerId)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the editor container.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="DocEditor | null">
+  The OnlyOffice `DocEditor` instance, or `null` if not found or not initialized.
+</ResponseField>
+
+### Example
+
+```javascript
+var editor = OnlyOfficeEditorModule.getEditor('editorContainer');
+
+if (editor) {
+    // Call native OnlyOffice API methods
+    editor.showMessage('Hello from custom code!');
+    
+    // Request specific save operation
+    editor.processSaveResult(true);
+} else {
+    console.error('Editor not found');
+}
+```
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Custom Commands">
+    Execute OnlyOffice Document Server API commands not wrapped by the module.
+  </Card>
+  <Card title="Advanced Integration">
+    Access internal editor methods for complex customization.
+  </Card>
+  <Card title="Event Subscription">
+    Subscribe to additional OnlyOffice events after initialization.
+  </Card>
+  <Card title="Plugin Management">
+    Load or interact with OnlyOffice plugins programmatically.
+  </Card>
+</CardGroup>
+
+<Tip>
+Refer to the [OnlyOffice API Documentation](https://api.onlyoffice.com/editors/methods) for available methods on the `DocEditor` object.
+</Tip>
+
+---
+
+## destroy()
+
+Destroys an editor instance and releases resources.
+
+### Signature
+
+```javascript
+OnlyOfficeEditorModule.destroy(containerId)
+```
+
+### Parameters
+
+<ParamField path="containerId" type="string" required>
+  The ID of the editor container to destroy.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="void">
+  This method does not return a value.
+</ResponseField>
+
+### Behavior
+
+- Calls `destroyEditor()` on the OnlyOffice editor instance
+- Removes internal references to prevent memory leaks
+- Safe to call even if editor doesn't exist (no-op)
+- Clears any pending download resolvers
+
+### Example
+
+```javascript
+// Clean up when navigating away
+window.addEventListener('beforeunload', function() {
+    OnlyOfficeEditorModule.destroy('editorContainer');
+});
+```
+
+### Example: Reinitialize Editor
+
+```javascript
+function reinitializeEditor() {
+    // Destroy existing instance
+    OnlyOfficeEditorModule.destroy('editorContainer');
+    
+    // Create new instance with different config
+    var newConfig = {
+        document: {
+            fileType: 'docx',
+            key: 'new-key-' + Date.now(),
+            title: 'New Document.docx',
+            url: 'https://example.com/new-doc.docx'
+        },
+        documentType: 'word'
+    };
+    
+    OnlyOfficeEditorModule.init('editorContainer', newConfig);
+}
+```
+
+<Note>
+`destroy()` is automatically called by `init()` if an editor already exists for the container, so you typically don't need to call it manually before reinitializing.
+</Note>
+
+### Memory Management
+
+```javascript
+// Good practice: destroy editors when done
+function cleanupEditors() {
+    var editorIds = ['editor1', 'editor2', 'editor3'];
+    editorIds.forEach(function(id) {
+        OnlyOfficeEditorModule.destroy(id);
+    });
+}
+
+// Call on page unload or component unmount
+window.addEventListener('pagehide', cleanupEditors);
+```
+
+---
+
+## Error Handling
+
+All asynchronous methods return Promises and should include proper error handling:
+
+```javascript
+// Using .catch()
+OnlyOfficeEditorModule.getEditedDocumentUrl('editorContainer')
+    .then(function(url) {
+        console.log('Success:', url);
+    })
+    .catch(function(error) {
+        console.error('Error:', error.message);
+    });
+
+// Using try/catch with async/await
+async function handleDocument() {
+    try {
+        var blob = await OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer');
+        // Process blob
+    } catch (error) {
+        console.error('Failed:', error);
+        // Handle error
+    }
+}
+```
+
+## Common Error Scenarios
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Editor no inicializado" | Editor not initialized or wrong container ID | Verify `containerId` and ensure `init()` was called successfully |
+| "DocsAPI not loaded" | OnlyOffice API script not loaded | Load the OnlyOffice API script before initializing |
+| "No se recibió URL de descarga" | OnlyOffice didn't return download URL | Check OnlyOffice server status and document key validity |
+| "HiddenField no encontrado" | Hidden field ID doesn't exist | Verify the hidden field exists in the DOM |

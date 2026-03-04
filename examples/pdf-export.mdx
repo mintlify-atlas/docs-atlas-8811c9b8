@@ -1,0 +1,515 @@
+---
+title: 'PDF Export'
+description: 'Complete example of loading a document and converting it to PDF for download'
+icon: 'file-pdf'
+---
+
+## Overview
+
+The OnlyOffice Editor control provides powerful PDF conversion capabilities. You can convert both original documents and edited documents to PDF format using the OnlyOffice Document Server's conversion service.
+
+## Key Methods
+
+<CardGroup cols={2}>
+  <Card title="ConvertCurrentDocumentToPdfBytes" icon="file">
+    Converts the current document (edited or original) to PDF and returns bytes
+  </Card>
+  
+  <Card title="ConvertEditedDocumentToPdfBytes" icon="pen-to-square">
+    Converts only the edited version of the document to PDF
+  </Card>
+  
+  <Card title="ConvertCurrentDocumentToPdfUrl" icon="link">
+    Returns a URL to the converted PDF file
+  </Card>
+  
+  <Card title="GetEditedDocumentBytes" icon="download">
+    Gets the edited document in its original format
+  </Card>
+</CardGroup>
+
+## Complete Implementation
+
+<Tabs>
+  <Tab title="Basic PDF Export">
+    ### ASPX Markup
+
+    ```aspx Default.aspx
+    <%@ Page Title="Home Page" Language="C#" MasterPageFile="~/Site.Master" 
+             AutoEventWireup="true" CodeBehind="Default.aspx.cs" 
+             Inherits="OnlyOfficeControl._Default" ValidateRequest="false" %>
+    <%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+                 TagPrefix="oo" TagName="Editor" %>
+
+    <asp:Content ID="BodyContent" ContentPlaceHolderID="MainContent" runat="server">
+        <link rel="stylesheet" href="<%= ResolveUrl("~/Content/WebEditor.css") %>" />
+
+        <div class="we">
+            <section class="we-toolbar">
+                <div class="we-toolbar__left">
+                    <asp:FileUpload ID="fuFile" runat="server" 
+                                    CssClass="form-control we-input" />
+                </div>
+                <div class="we-toolbar__right">
+                    <asp:Button ID="btnUpload" runat="server" 
+                                Text="Upload and Open" 
+                                CssClass="btn we-btn we-btn-accent" 
+                                OnClick="btnUpload_Click" />
+                </div>
+                <div class="we-toolbar__status">
+                    <asp:Literal ID="litStatus" runat="server" />
+                </div>
+            </section>
+
+            <div class="we-layout">
+                <main class="we-main">
+                    <div class="we-surface">
+                        <div class="we-surface__head">
+                            <div class="we-surface__title">Document</div>
+                            <div class="we-surface__meta">OnlyOffice Editor</div>
+                        </div>
+                        <oo:Editor ID="docEditor" runat="server" 
+                                   CaptureTriggerId="btnDescargar" />
+                    </div>
+                </main>
+
+                <aside class="we-aside">
+                    <div class="we-surface we-surface--sticky">
+                        <div class="we-surface__head">
+                            <div class="we-surface__title">Actions</div>
+                            <div class="we-surface__meta">Export Options</div>
+                        </div>
+
+                        <div class="we-asideActions">
+                            <asp:Button ID="btnDescargar" runat="server" 
+                                        Text="Save and Download as PDF" 
+                                        CssClass="btn we-btn we-btn-accent we-btn-block" 
+                                        OnClick="btnDescargar_Click" />
+                            <div class="we-asideHint">
+                                Download the edited document as PDF
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </asp:Content>
+    ```
+
+    ### Code-Behind
+
+    ```csharp Default.aspx.cs
+    using System;
+    using System.IO;
+    using System.Web.UI;
+
+    namespace OnlyOfficeControl
+    {
+        public partial class _Default : Page
+        {
+            protected void Page_Load(object sender, EventArgs e)
+            {
+                // Optional: Load a default document
+                if (!IsPostBack)
+                {
+                    string sampleFilePath = Server.MapPath("~/doc.docx");
+                    if (File.Exists(sampleFilePath))
+                    {
+                        byte[] fileBytes = File.ReadAllBytes(sampleFilePath);
+                        docEditor.SetDocumentFromBytes(fileBytes, "doc.docx");
+                    }
+                }
+            }
+
+            protected void btnUpload_Click(object sender, EventArgs e)
+            {
+                if (!fuFile.HasFile)
+                {
+                    litStatus.Text = string.Empty;
+                    return;
+                }
+
+                docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+                litStatus.Text = string.Empty;
+            }
+
+            protected void btnDescargar_Click(object sender, EventArgs e)
+            {
+                // Convert the edited document to PDF
+                byte[] documentBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+
+                if (documentBytes == null || documentBytes.Length == 0)
+                {
+                    litStatus.Text = "<span class='text-warning'>No document to download.</span>";
+                    return;
+                }
+
+                // Clear the edited document from memory
+                docEditor.ClearEditedDocument();
+
+                // Prepare the filename
+                var ext = Path.GetExtension(docEditor.DocumentName ?? ".docx");
+                var fileName = docEditor.DocumentName ?? ("documento" + ext);
+
+                // Send the PDF to the browser
+                Response.Clear();
+                Response.ContentType = "application/octet-stream";
+                Response.AddHeader("Content-Disposition", 
+                    "attachment; filename=" + fileName + ".pdf");
+                Response.AddHeader("Content-Length", documentBytes.Length.ToString());
+                Response.BinaryWrite(documentBytes);
+                Response.End();
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Advanced Options">
+    ### Multiple Export Options
+
+    ```aspx
+    <asp:Button ID="btnDownloadPdf" runat="server" 
+                Text="Download as PDF" 
+                OnClick="btnDownloadPdf_Click" />
+    <asp:Button ID="btnDownloadOriginal" runat="server" 
+                Text="Download Original Format" 
+                OnClick="btnDownloadOriginal_Click" />
+    ```
+
+    ```csharp
+    protected void btnDownloadPdf_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            // Convert to PDF with custom retry settings
+            byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+                maxAttempts: 20,  // Try up to 20 times
+                delayMs: 1500     // Wait 1.5 seconds between attempts
+            );
+
+            if (pdfBytes == null || pdfBytes.Length == 0)
+            {
+                throw new Exception("PDF conversion failed.");
+            }
+
+            // Download as PDF
+            string fileName = Path.GetFileNameWithoutExtension(docEditor.DocumentName);
+            DownloadFile(pdfBytes, $"{fileName}.pdf", "application/pdf");
+        }
+        catch (Exception ex)
+        {
+            litStatus.Text = $"<span class='text-danger'>Error: {ex.Message}</span>";
+        }
+    }
+
+    protected void btnDownloadOriginal_Click(object sender, EventArgs e)
+    {
+        // Download in original format (docx, xlsx, etc.)
+        byte[] docBytes = docEditor.GetEditedDocumentBytes();
+        
+        if (docBytes == null || docBytes.Length == 0)
+        {
+            litStatus.Text = "<span class='text-warning'>No edited document.</span>";
+            return;
+        }
+
+        string contentType = GetContentType(docEditor.DocumentName);
+        DownloadFile(docBytes, docEditor.DocumentName, contentType);
+    }
+
+    private void DownloadFile(byte[] fileBytes, string fileName, string contentType)
+    {
+        Response.Clear();
+        Response.ContentType = contentType;
+        Response.AddHeader("Content-Disposition", $"attachment; filename={fileName}");
+        Response.AddHeader("Content-Length", fileBytes.Length.ToString());
+        Response.BinaryWrite(fileBytes);
+        Response.End();
+    }
+
+    private string GetContentType(string fileName)
+    {
+        string ext = Path.GetExtension(fileName).ToLower();
+        switch (ext)
+        {
+            case ".docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case ".xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case ".pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            default: return "application/octet-stream";
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Batch Conversion">
+    ### Convert Multiple Documents
+
+    ```csharp
+    protected void btnBatchConvert_Click(object sender, EventArgs e)
+    {
+        string[] documentPaths = Directory.GetFiles(
+            Server.MapPath("~/Documents"), 
+            "*.docx"
+        );
+
+        string outputFolder = Server.MapPath("~/PDFs");
+        Directory.CreateDirectory(outputFolder);
+
+        int converted = 0;
+        var errors = new List<string>();
+
+        foreach (string docPath in documentPaths)
+        {
+            try
+            {
+                // Load the document
+                docEditor.SetDocumentFromFile(docPath);
+
+                // Convert to PDF
+                byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+
+                // Save to output folder
+                string fileName = Path.GetFileNameWithoutExtension(docPath);
+                string pdfPath = Path.Combine(outputFolder, fileName + ".pdf");
+                File.WriteAllBytes(pdfPath, pdfBytes);
+
+                converted++;
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{Path.GetFileName(docPath)}: {ex.Message}");
+            }
+        }
+
+        litStatus.Text = $"Converted {converted} documents. ";
+        if (errors.Count > 0)
+        {
+            litStatus.Text += $"{errors.Count} failed.";
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Understanding the CaptureTriggerId
+
+The `CaptureTriggerId` property enables automatic capture of edited content when a button is clicked:
+
+```aspx
+<oo:Editor ID="docEditor" runat="server" CaptureTriggerId="btnDescargar" />
+```
+
+**How it works:**
+
+1. When `btnDescargar` is clicked, the JavaScript module intercepts the click
+2. It captures the edited document from OnlyOffice
+3. Converts it to Base64 and stores it in a hidden field
+4. Triggers a postback to the server
+5. Server-side code can then access the edited document via `GetEditedDocumentBytes()`
+
+<Note>
+  This mechanism allows seamless integration between the client-side editor and server-side code without manual JavaScript.
+</Note>
+
+## Conversion Methods Explained
+
+### ConvertCurrentDocumentToPdfBytes
+
+This is the primary method for PDF conversion:
+
+```csharp
+byte[] ConvertCurrentDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+**Parameters:**
+- `maxAttempts` - Maximum number of retry attempts (default: 15)
+- `delayMs` - Delay in milliseconds between attempts (default: 1000)
+
+**Returns:** Byte array containing the PDF file
+
+**Behavior:**
+- If the document has been edited (via `CaptureTriggerId`), converts the edited version
+- Otherwise, converts the original loaded document
+- Retries the conversion if it's still in progress
+
+### ConvertEditedDocumentToPdfBytes
+
+Converts only the captured edited document:
+
+```csharp
+byte[] ConvertEditedDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+<Warning>
+  This method requires that the edited document has been captured first (via `CaptureTriggerId` or manual capture).
+</Warning>
+
+### Implementation Details
+
+From the source code (`OnlyOfficeEditor.ascx.cs:209-213`):
+
+```csharp
+public byte[] ConvertCurrentDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+{
+    var pdfUrl = ConvertCurrentDocumentToPdfUrl(maxAttempts, delayMs);
+    return DownloadBytesFromUrl(pdfUrl);
+}
+```
+
+The conversion process:
+
+1. Calls OnlyOffice Document Server's ConvertService API
+2. Sends the document URL, file type, and JWT token
+3. Polls for completion (with retries)
+4. Downloads the converted PDF from the returned URL
+5. Returns the PDF as a byte array
+
+## Error Handling
+
+### Timeout Handling
+
+```csharp
+protected void btnDownloadPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        // Increase timeout for large documents
+        byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+            maxAttempts: 30,   // 30 attempts
+            delayMs: 2000      // 2 seconds between attempts = 60 second timeout
+        );
+
+        if (pdfBytes == null || pdfBytes.Length == 0)
+        {
+            throw new InvalidOperationException("PDF conversion returned empty result.");
+        }
+
+        DownloadFile(pdfBytes, docEditor.DocumentName + ".pdf", "application/pdf");
+    }
+    catch (TimeoutException ex)
+    {
+        litStatus.Text = "<span class='text-danger'>Conversion timeout. The document may be too large.</span>";
+    }
+    catch (InvalidOperationException ex)
+    {
+        litStatus.Text = $"<span class='text-danger'>Conversion error: {ex.Message}</span>";
+    }
+    catch (Exception ex)
+    {
+        litStatus.Text = $"<span class='text-danger'>Unexpected error: {ex.Message}</span>";
+        // Log the error
+        LogError(ex);
+    }
+}
+```
+
+### Validation
+
+```csharp
+protected void btnDownloadPdf_Click(object sender, EventArgs e)
+{
+    // Check if a document is loaded
+    if (!docEditor.HasDocument)
+    {
+        litStatus.Text = "<span class='text-warning'>Please load a document first.</span>";
+        return;
+    }
+
+    // Check if the document has been edited
+    if (!docEditor.HasEditedDocument)
+    {
+        litStatus.Text = "<span class='text-info'>Converting original document...</span>";
+    }
+
+    try
+    {
+        byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+        // ... download logic
+    }
+    catch (Exception ex)
+    {
+        litStatus.Text = $"<span class='text-danger'>Error: {ex.Message}</span>";
+    }
+}
+```
+
+## Server-Side Configuration
+
+Ensure your OnlyOffice Editor control is properly configured:
+
+```csharp OnlyOfficeEditor.ascx.cs
+public string OnlyOfficeApiUrl { get; set; } = 
+    "https://your-server.com/web-apps/apps/api/documents/api.js";
+
+public string JwtSecret { get; set; } = "your_secret_key";
+
+public string PublicBaseUrl { get; set; } = "https://your-app.com";
+```
+
+<Warning>
+  The `PublicBaseUrl` must be accessible from your OnlyOffice Document Server for the conversion service to download the source document.
+</Warning>
+
+## Performance Optimization
+
+### Async Processing
+
+For large documents, consider processing conversions asynchronously:
+
+```csharp
+protected async void btnDownloadPdf_Click(object sender, EventArgs e)
+{
+    litStatus.Text = "<span class='text-info'>Converting... This may take a moment.</span>";
+    
+    await Task.Run(() =>
+    {
+        byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+            maxAttempts: 40,
+            delayMs: 1500
+        );
+        
+        // Cache the result
+        Cache[$"pdf_{Session.SessionID}"] = pdfBytes;
+    });
+    
+    byte[] cachedPdf = (byte[])Cache[$"pdf_{Session.SessionID}"];
+    DownloadFile(cachedPdf, docEditor.DocumentName + ".pdf", "application/pdf");
+}
+```
+
+## Supported Source Formats
+
+The conversion service supports:
+
+<CardGroup cols={3}>
+  <Card title="Documents" icon="file-word">
+    - DOCX, DOC
+    - ODT, RTF
+    - TXT, HTML
+  </Card>
+  
+  <Card title="Spreadsheets" icon="file-excel">
+    - XLSX, XLS
+    - ODS, CSV
+  </Card>
+  
+  <Card title="Presentations" icon="file-powerpoint">
+    - PPTX, PPT
+    - ODP
+  </Card>
+</CardGroup>
+
+All formats can be converted to PDF.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Styling" icon="palette" href="/examples/custom-styling">
+    Learn how to customize the editor appearance
+  </Card>
+  
+  <Card title="View Mode" icon="eye" href="/examples/view-mode">
+    Display documents in read-only mode
+  </Card>
+</CardGroup>

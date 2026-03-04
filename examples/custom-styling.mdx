@@ -1,0 +1,628 @@
+---
+title: 'Custom Styling'
+description: 'Example of customizing the OnlyOffice editor appearance with CSS and JavaScript'
+icon: 'palette'
+---
+
+## Overview
+
+The OnlyOffice Editor control provides extensive customization options for appearance, layout, and behavior. This guide shows you how to apply custom styling and configure the editor's visual presentation.
+
+## CSS Customization
+
+### Using the Included Stylesheet
+
+The control includes a professional stylesheet (`WebEditor.css`) that provides a modern, clean interface:
+
+```aspx
+<link rel="stylesheet" href="<%= ResolveUrl("~/Content/WebEditor.css") %>" />
+```
+
+### CSS Variables
+
+The stylesheet uses CSS custom properties for easy theming:
+
+```css WebEditor.css
+:root {
+    --we-bg: #f4f6f8;          /* Background color */
+    --we-surface: #ffffff;      /* Surface/card color */
+    --we-muted: #64748b;        /* Muted text color */
+    --we-text: #0f172a;         /* Primary text color */
+    --we-border: #e2e8f0;       /* Border color */
+    --we-accent: #7c9383;       /* Accent/primary color */
+    --we-accent-2: #6f8576;     /* Darker accent color */
+}
+```
+
+### Custom Theme Example
+
+<Tabs>
+  <Tab title="Dark Theme">
+    Create a dark theme by overriding the CSS variables:
+
+    ```css
+    :root {
+        --we-bg: #1e293b;
+        --we-surface: #334155;
+        --we-muted: #94a3b8;
+        --we-text: #f1f5f9;
+        --we-border: #475569;
+        --we-accent: #3b82f6;
+        --we-accent-2: #2563eb;
+    }
+
+    .we {
+        color: var(--we-text);
+    }
+
+    .we-surface {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Corporate Theme">
+    Create a branded theme matching your company colors:
+
+    ```css
+    :root {
+        --we-bg: #fafbfc;
+        --we-surface: #ffffff;
+        --we-muted: #6c757d;
+        --we-text: #212529;
+        --we-border: #dee2e6;
+        --we-accent: #0066cc;      /* Your brand primary color */
+        --we-accent-2: #0052a3;    /* Your brand secondary color */
+    }
+
+    .we-surface__head {
+        background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+        color: white;
+    }
+
+    .we-surface__title,
+    .we-surface__meta {
+        color: white;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Minimalist Theme">
+    Create a clean, minimalist design:
+
+    ```css
+    :root {
+        --we-bg: #ffffff;
+        --we-surface: #ffffff;
+        --we-muted: #999999;
+        --we-text: #000000;
+        --we-border: #e0e0e0;
+        --we-accent: #000000;
+        --we-accent-2: #333333;
+    }
+
+    .we {
+        border-radius: 0;
+        border: none;
+        border-top: 3px solid var(--we-accent);
+    }
+
+    .we-surface {
+        border-radius: 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .we-btn {
+        border-radius: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Editor Configuration
+
+### EditorConfig Customization
+
+The JavaScript module (`OnlyOfficeEditor.js:55-70`) applies default customization settings:
+
+```javascript OnlyOfficeEditor.js
+config.editorConfig = config.editorConfig || {};
+config.editorConfig.customization = config.editorConfig.customization || {};
+var cust = config.editorConfig.customization;
+cust.review = cust.review || {};
+
+if (cust.uiTheme === undefined) cust.uiTheme = 'theme-classic-light';
+if (cust.compactToolbar === undefined) cust.compactToolbar = false;
+if (cust.toolbarNoTabs === undefined) cust.toolbarNoTabs = false;
+if (cust.hideRightMenu === undefined) cust.hideRightMenu = true;
+if (cust.hideRulers === undefined) cust.hideRulers = true;
+if (cust.review.showReviewChanges === undefined) {
+    cust.review.showReviewChanges = cust.showReviewChanges === undefined
+        ? false
+        : !!cust.showReviewChanges;
+}
+```
+
+### Available UI Themes
+
+<CardGroup cols={3}>
+  <Card title="Classic Light" icon="sun">
+    `theme-classic-light`
+    
+    Traditional light interface
+  </Card>
+  
+  <Card title="Classic Dark" icon="moon">
+    `theme-dark`
+    
+    Dark mode interface
+  </Card>
+  
+  <Card title="Contrast Dark" icon="circle-half-stroke">
+    `theme-contrast-dark`
+    
+    High contrast dark theme
+  </Card>
+</CardGroup>
+
+## Complete Styling Example
+
+### ASPX Page with Custom Layout
+
+```aspx CustomEditor.aspx
+<%@ Page Title="Custom Editor" Language="C#" 
+         MasterPageFile="~/Site.Master" AutoEventWireup="true" 
+         CodeBehind="CustomEditor.aspx.cs" 
+         Inherits="OnlyOfficeControl.CustomEditor" ValidateRequest="false" %>
+<%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+             TagPrefix="oo" TagName="Editor" %>
+
+<asp:Content ID="BodyContent" ContentPlaceHolderID="MainContent" runat="server">
+    <style>
+        /* Custom iframe height */
+        iframe {
+            height: 700px;  
+        }
+
+        /* Custom container styling */
+        .custom-editor-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Custom header */
+        .custom-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .custom-header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .custom-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+    </style>
+    <link rel="stylesheet" href="<%= ResolveUrl("~/Content/WebEditor.css") %>" />
+
+    <div class="custom-editor-container">
+        <div class="custom-header">
+            <h1>Document Editor</h1>
+            <p>Edit your documents with powerful OnlyOffice integration</p>
+        </div>
+
+        <div class="we">
+            <section class="we-toolbar" aria-label="Actions">
+                <div class="we-toolbar__left">
+                    <asp:FileUpload ID="fuFile" runat="server" 
+                                    CssClass="form-control we-input" />
+                </div>
+                <div class="we-toolbar__right">
+                    <asp:Button ID="btnUpload" runat="server" 
+                                Text="Upload and Open" 
+                                CssClass="btn we-btn we-btn-accent" 
+                                OnClick="btnUpload_Click" />
+                </div>
+                <div class="we-toolbar__status">
+                    <asp:Literal ID="litStatus" runat="server" />
+                </div>
+            </section>
+
+            <div class="we-layout">
+                <main class="we-main" aria-label="Editor">
+                    <div class="we-surface">
+                        <div class="we-surface__head">
+                            <div class="we-surface__title">Document</div>
+                            <div class="we-surface__meta">OnlyOffice Editor View</div>
+                        </div>
+                        <oo:Editor ID="docEditor" runat="server" 
+                                   CaptureTriggerId="btnDescargar" />
+                    </div>
+                </main>
+
+                <aside class="we-aside" aria-label="Actions Panel">
+                    <div class="we-surface we-surface--sticky">
+                        <div class="we-surface__head">
+                            <div class="we-surface__title">Actions</div>
+                            <div class="we-surface__meta">Quick Actions</div>
+                        </div>
+
+                        <div class="we-asideActions">
+                            <asp:Button ID="btnDescargar" runat="server" 
+                                        Text="Save and Download" 
+                                        CssClass="btn we-btn we-btn-accent we-btn-block" 
+                                        OnClick="btnDescargar_Click" />
+                            <div class="we-asideHint">
+                                Download the edited document as PDF
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+</asp:Content>
+```
+
+## CSS Classes Reference
+
+### Container Classes
+
+| Class | Description |
+|-------|-------------|
+| `.we` | Main wrapper container |
+| `.we-toolbar` | Toolbar section |
+| `.we-layout` | Main layout grid |
+| `.we-main` | Main content area |
+| `.we-aside` | Sidebar area |
+| `.we-surface` | Card/surface container |
+
+### Component Classes
+
+| Class | Description |
+|-------|-------------|
+| `.we-surface__head` | Card header |
+| `.we-surface__title` | Card title |
+| `.we-surface__meta` | Card metadata |
+| `.we-btn` | Button base class |
+| `.we-btn-accent` | Accent button style |
+| `.we-btn-block` | Full-width button |
+| `.we-input` | Input field |
+
+### Layout Modifiers
+
+| Class | Description |
+|-------|-------------|
+| `.we-surface--sticky` | Makes surface sticky on scroll |
+| `.we-toolbar__left` | Left toolbar section |
+| `.we-toolbar__right` | Right toolbar section |
+| `.we-toolbar__status` | Status message area |
+
+## Loading Indicator Customization
+
+The control includes a built-in loading overlay (`OnlyOfficeEditor.ascx:5-10`):
+
+```html OnlyOfficeEditor.ascx
+<div id="<%= EditorContainerId %>_busy" class="ooe-busyOverlay" 
+     style="display:none;" aria-live="polite" aria-busy="true">
+    <div class="ooe-busyOverlay__card" role="status">
+        <span class="ooe-spinner" aria-hidden="true"></span>
+        <div class="ooe-busyOverlay__text">Processing&#8230;</div>
+    </div>
+</div>
+```
+
+### Custom Loading Spinner
+
+```css
+.ooe-spinner {
+    width: 18px;
+    height: 18px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-top-color: var(--we-accent);
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ooe-busyOverlay__card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.ooe-busyOverlay__text {
+    font-weight: 600;
+    color: var(--we-text);
+    margin-left: 12px;
+}
+```
+
+## Responsive Design
+
+The default stylesheet includes responsive breakpoints:
+
+```css WebEditor.css
+@media (max-width: 992px) {
+    .we-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .we-surface--sticky {
+        position: static;
+    }
+}
+```
+
+### Custom Responsive Behavior
+
+```css
+/* Tablet */
+@media (max-width: 1024px) {
+    .we-layout {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .we-aside {
+        order: -1;  /* Move sidebar above editor */
+    }
+
+    iframe {
+        height: 500px;
+    }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+    .we {
+        padding: 8px;
+        border-radius: 8px;
+    }
+
+    .we-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .we-toolbar__left,
+    .we-toolbar__right {
+        width: 100%;
+    }
+
+    iframe {
+        height: 400px;
+    }
+
+    .we-surface__head {
+        padding: 8px 10px;
+    }
+}
+```
+
+## Editor Height Customization
+
+### Set Height Programmatically
+
+```aspx
+<oo:Editor ID="docEditor" runat="server" EditorHeight="800px" />
+```
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    // Set height dynamically
+    docEditor.EditorHeight = "600px";
+}
+```
+
+### Responsive Height
+
+```css
+iframe {
+    height: calc(100vh - 250px);  /* Full viewport minus headers */
+    min-height: 400px;
+    max-height: 900px;
+}
+```
+
+## Advanced Layout Examples
+
+<Tabs>
+  <Tab title="Full Screen Editor">
+    ```css
+    .we {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-radius: 0;
+        padding: 0;
+        margin: 0;
+    }
+
+    .we-layout {
+        height: calc(100vh - 60px);
+    }
+
+    iframe {
+        height: 100%;
+    }
+
+    .we-toolbar {
+        border-bottom: 1px solid var(--we-border);
+        padding: 12px 20px;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Sidebar Navigation">
+    ```css
+    .we-layout {
+        grid-template-columns: 250px 1fr 320px;
+    }
+
+    .we-nav {
+        background: var(--we-surface);
+        border: 1px solid var(--we-border);
+        border-radius: 16px;
+        padding: 16px;
+    }
+
+    .we-nav-item {
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .we-nav-item:hover {
+        background: var(--we-bg);
+    }
+
+    .we-nav-item.active {
+        background: var(--we-accent);
+        color: white;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Compact View">
+    ```css
+    .we {
+        padding: 8px;
+    }
+
+    .we-layout {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .we-surface__head {
+        padding: 8px 10px;
+    }
+
+    .we-toolbar {
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .we-toolbar__status {
+        grid-column: 2;
+    }
+
+    iframe {
+        height: 500px;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## JavaScript Customization
+
+The module provides hooks for custom behavior (`OnlyOfficeEditor.js:75-109`):
+
+```javascript
+var options = {
+    onReady: function() {
+        console.log('Editor is ready');
+        // Custom initialization code
+    },
+    onDocumentReady: function() {
+        console.log('Document loaded');
+        // Custom document handling
+    },
+    onError: function(evt) {
+        console.error('Editor error:', evt);
+        // Custom error handling
+    }
+};
+
+OnlyOfficeEditorModule.init(containerId, config, options);
+```
+
+## Accessibility Features
+
+The included markup uses ARIA attributes for better accessibility:
+
+```html
+<section class="we-toolbar" aria-label="Actions">
+<main class="we-main" aria-label="Editor">
+<aside class="we-aside" aria-label="Actions Panel">
+<div role="status" aria-live="polite" aria-busy="true">
+```
+
+### Enhance Accessibility
+
+```aspx
+<asp:Button ID="btnUpload" runat="server" 
+            Text="Upload and Open" 
+            CssClass="btn we-btn we-btn-accent"
+            ToolTip="Upload a document to edit"
+            aria-label="Upload and open document for editing"
+            OnClick="btnUpload_Click" />
+```
+
+## Print Styles
+
+```css
+@media print {
+    .we-toolbar,
+    .we-aside {
+        display: none;
+    }
+
+    .we-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .we {
+        border: none;
+        padding: 0;
+    }
+
+    iframe {
+        height: auto;
+        min-height: 100vh;
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Simple Editor" icon="pen-to-square" href="/examples/simple-editor">
+    See the basic editor implementation
+  </Card>
+  
+  <Card title="View Mode" icon="eye" href="/examples/view-mode">
+    Learn about read-only document display
+  </Card>
+  
+  <Card title="PDF Export" icon="file-pdf" href="/examples/pdf-export">
+    Export documents to PDF format
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/api/user-control/overview">
+    View complete API documentation
+  </Card>
+</CardGroup>

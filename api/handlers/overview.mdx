@@ -1,0 +1,144 @@
+---
+title: "OnlyOfficeHandler.ashx"
+description: "HTTP handler for OnlyOffice document operations including download, callback, and proxy actions"
+---
+
+## Overview
+
+The `OnlyOfficeHandler.ashx` is an ASP.NET HTTP handler that processes document-related requests for the OnlyOffice Control library. It implements the `IHttpHandler` interface and provides three main actions for document management.
+
+## Handler Endpoint
+
+```
+OnlyOfficeHandler.ashx?action={action}
+```
+
+## Available Actions
+
+The handler supports three primary actions, specified via the `action` query parameter:
+
+### download
+
+Downloads a document file from the server storage.
+
+```
+GET OnlyOfficeHandler.ashx?action=download&fileId={fileId}
+```
+
+[Learn more about document download →](/api/handlers/download)
+
+### callback
+
+Receives document status updates from OnlyOffice Document Server when users edit or save documents.
+
+```
+POST OnlyOfficeHandler.ashx?action=callback&fileId={fileId}
+```
+
+[Learn more about document callback →](/api/handlers/callback)
+
+### proxy
+
+Proxies external document requests to handle CORS restrictions and security validation.
+
+```
+GET OnlyOfficeHandler.ashx?action=proxy&url={url}
+```
+
+[Learn more about document proxy →](/api/handlers/proxy)
+
+## Error Handling
+
+If an invalid or missing action is provided, the handler returns:
+
+<ResponseField name="statusCode" type="number" default="400">
+  HTTP status code indicating bad request
+</ResponseField>
+
+<ResponseField name="body" type="string" default="Invalid action">
+  Error message in plain text format
+</ResponseField>
+
+### Example Error Response
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: text/plain
+
+Invalid action
+```
+
+## File Storage
+
+All document files are stored in the `~/App_Data/uploads` directory. The handler automatically creates this directory if it doesn't exist.
+
+### File Naming Convention
+
+Files are stored with the pattern: `{fileId}.{extension}`
+
+For example:
+- `doc123.docx`
+- `sheet456.xlsx`
+- `presentation789.pptx`
+
+## Implementation Details
+
+### Namespace
+
+```csharp
+OnlyOfficeControl.Controls.OnlyOfficeEditorBundle
+```
+
+### Class
+
+```csharp
+public class OnlyOfficeHandler : IHttpHandler
+{
+    public bool IsReusable => false;
+}
+```
+
+### Handler Registration
+
+Ensure the handler is registered in your `web.config`:
+
+```xml
+<system.webServer>
+  <handlers>
+    <add name="OnlyOfficeHandler" 
+         verb="*" 
+         path="OnlyOfficeHandler.ashx" 
+         type="OnlyOfficeControl.Controls.OnlyOfficeEditorBundle.OnlyOfficeHandler" />
+  </handlers>
+</system.webServer>
+```
+
+## Security Considerations
+
+<Warning>
+  The handler processes file operations and external requests. Ensure proper authentication and authorization are implemented at the application level before allowing access to this handler.
+</Warning>
+
+### TLS Configuration
+
+The handler enforces secure connections for external requests:
+
+```csharp
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                       SecurityProtocolType.Tls11 | 
+                                       SecurityProtocolType.Tls;
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Download Action" icon="download" href="/api/handlers/download">
+    Learn how to download documents from storage
+  </Card>
+  <Card title="Callback Action" icon="arrow-rotate-left" href="/api/handlers/callback">
+    Handle document save callbacks from OnlyOffice
+  </Card>
+  <Card title="Proxy Action" icon="arrow-right-arrow-left" href="/api/handlers/proxy">
+    Proxy external document requests
+  </Card>
+</CardGroup>

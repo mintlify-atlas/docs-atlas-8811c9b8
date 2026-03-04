@@ -1,97 +1,242 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: OnlyOffice Control Documentation
+description: ASP.NET Web Forms control for integrating OnlyOffice Document Server with document editing, viewing, and PDF conversion capabilities
+mode: custom
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#FF6F3D] via-[#D9461C] to-[#FF6F3D] dark:from-[#1a1d27] dark:via-[#0f1117] dark:to-[#1a1d27] py-20">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-20"></div>
+  
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="lg:grid lg:grid-cols-12 lg:gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white dark:text-gray-100 mb-6">
+          OnlyOffice Control for ASP.NET
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 dark:text-gray-300 mb-8 max-w-2xl">
+          Seamlessly integrate OnlyOffice Document Server into your ASP.NET Web Forms applications with full editing, viewing, and PDF conversion capabilities.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#FF6F3D] font-semibold hover:bg-gray-100 transition-colors no-underline"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a 
+            href="/api/user-control/overview" 
+            className="inline-flex items-center px-6 py-3 rounded-lg border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors no-underline"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block lg:col-span-5">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#FFB800]/20 to-transparent rounded-2xl blur-2xl"></div>
+          <div className="relative bg-white/10 dark:bg-[#1a1d27]/80 backdrop-blur-sm border border-white/20 dark:border-[#27272a] rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <pre className="text-sm text-gray-100 dark:text-gray-300 overflow-x-auto">
+              <code>{`<oo:Editor 
+  ID="docEditor" 
+  runat="server"
+  Mode="edit"
+  JwtSecret="your-secret"
+  OnlyOfficeApiUrl="..." />`}</code>
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Quick Start</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">Get your OnlyOffice editor up and running in minutes</p>
+  </div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Add the control to your page">
+      Register the OnlyOffice Editor control in your ASPX page and add it to your form:
+      
+      ```aspx
+      <%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+                   TagPrefix="oo" TagName="Editor" %>
+      
+      <oo:Editor ID="docEditor" runat="server" />
+      ```
+    </Step>
 
-## Make it yours
+    <Step title="Configure the control">
+      Set the required properties in your code-behind or inline:
+      
+      ```csharp
+      docEditor.OnlyOfficeApiUrl = "https://your-onlyoffice-server/web-apps/apps/api/documents/api.js";
+      docEditor.JwtSecret = "your-jwt-secret";
+      docEditor.PublicBaseUrl = "https://your-app-url";
+      docEditor.Mode = "edit"; // or "view"
+      ```
+    </Step>
 
-Design a docs site that looks great and empowers your users.
+    <Step title="Load a document">
+      Use one of the available methods to load a document into the editor:
+      
+      ```csharp
+      // From uploaded file
+      if (fileUpload.HasFile)
+      {
+          docEditor.SetDocumentFromBytes(
+              fileUpload.FileBytes, 
+              fileUpload.FileName
+          );
+      }
+      
+      // From server file
+      docEditor.SetDocumentFromFile(
+          Server.MapPath("~/documents/sample.docx")
+      );
+      ```
+    </Step>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+    <Step title="Handle document changes">
+      Retrieve edited documents and convert to PDF if needed:
+      
+      ```csharp
+      protected void btnDownload_Click(object sender, EventArgs e)
+      {
+          // Get edited document
+          byte[] documentBytes = docEditor.GetEditedDocumentBytes();
+          
+          // Or convert to PDF
+          byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+          
+          // Download
+          Response.ContentType = "application/pdf";
+          Response.AddHeader("Content-Disposition", "attachment; filename=document.pdf");
+          Response.BinaryWrite(pdfBytes);
+          Response.End();
+      }
+      ```
+    </Step>
+  </Steps>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Key Features</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">Everything you need to integrate document editing into your application</p>
+  </div>
 
-Everything you need to create world-class documentation.
+  <CardGroup cols={3}>
+    <Card title="Document Editing" icon="pen-to-square" href="/guides/basic-usage">
+      Full-featured document editor supporting Word, Excel, and PowerPoint formats
+    </Card>
+    <Card title="View Mode" icon="eye" href="/examples/view-mode">
+      Display documents in read-only mode with full formatting preservation
+    </Card>
+    <Card title="PDF Conversion" icon="file-pdf" href="/guides/pdf-conversion">
+      Convert any document to PDF with a single method call
+    </Card>
+    <Card title="JWT Security" icon="shield-halved" href="/concepts/jwt-authentication">
+      Built-in JWT authentication for secure document operations
+    </Card>
+    <Card title="File Management" icon="folder-open" href="/guides/document-upload">
+      Upload, download, and manage documents with integrated handlers
+    </Card>
+    <Card title="JavaScript API" icon="code" href="/api/javascript/overview">
+      Client-side API for advanced editor customization and control
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by Topic</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">Deep dive into specific areas of the control</p>
+  </div>
 
-## Need inspiration?
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="/concepts/configuration" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#FF6F3D] dark:hover:border-[#FF6F3D] transition-colors no-underline">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Core Concepts</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Understand configuration, authentication, document types, and callback handling
+      </p>
+      <span className="text-sm font-medium text-[#FF6F3D] group-hover:underline inline-flex items-center">
+        Learn more
+        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </span>
+    </a>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    <a href="/guides/basic-usage" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#FF6F3D] dark:hover:border-[#FF6F3D] transition-colors no-underline">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Guides</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Step-by-step instructions for common tasks and advanced scenarios
+      </p>
+      <span className="text-sm font-medium text-[#FF6F3D] group-hover:underline inline-flex items-center">
+        View guides
+        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </span>
+    </a>
+
+    <a href="/examples/simple-editor" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#FF6F3D] dark:hover:border-[#FF6F3D] transition-colors no-underline">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Examples</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Real-world code examples you can copy and adapt for your projects
+      </p>
+      <span className="text-sm font-medium text-[#FF6F3D] group-hover:underline inline-flex items-center">
+        Browse examples
+        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </span>
+    </a>
+
+    <a href="/api/user-control/overview" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#FF6F3D] dark:hover:border-[#FF6F3D] transition-colors no-underline">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">API Reference</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Complete reference for all properties, methods, and events
+      </p>
+      <span className="text-sm font-medium text-[#FF6F3D] group-hover:underline inline-flex items-center">
+        Explore API
+        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </span>
+    </a>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-br from-[#FF6F3D] to-[#D9461C] dark:from-[#1a1d27] dark:to-[#0f1117] border border-transparent dark:border-[#27272a] p-8 md:p-12">
+    <div className="max-w-3xl">
+      <h2 className="text-3xl font-bold text-white dark:text-gray-100 mb-4">
+        Ready to integrate document editing?
+      </h2>
+      <p className="text-lg text-white/90 dark:text-gray-300 mb-6">
+        Add powerful document editing capabilities to your ASP.NET application in just a few minutes.
+      </p>
+      <a 
+        href="/installation" 
+        className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#FF6F3D] font-semibold hover:bg-gray-100 transition-colors no-underline"
+      >
+        Start Installation
+        <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

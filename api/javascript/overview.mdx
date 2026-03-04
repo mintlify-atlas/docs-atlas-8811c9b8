@@ -1,0 +1,158 @@
+---
+title: 'JavaScript API Overview'
+description: 'Overview of the OnlyOfficeEditorModule JavaScript API for client-side editor integration'
+icon: 'js'
+---
+
+## Introduction
+
+The **OnlyOfficeEditorModule** is a JavaScript module that provides a client-side API for integrating OnlyOffice Document Server into ASP.NET applications. It acts as a wrapper around the OnlyOffice DocsAPI, providing simplified methods for initialization, document retrieval, and lifecycle management.
+
+## Accessing the Module
+
+The module is exposed as a global object and can be accessed directly from JavaScript:
+
+```javascript
+// Access the global OnlyOfficeEditorModule
+var editor = OnlyOfficeEditorModule.init('editorContainer', config, options);
+```
+
+<Note>
+The OnlyOfficeEditorModule is implemented as an IIFE (Immediately Invoked Function Expression) and is available globally once the script is loaded.
+</Note>
+
+## Module Architecture
+
+The module uses a singleton pattern to manage multiple editor instances:
+
+- **Instance Management**: Maintains internal references to all editor instances by container ID
+- **Event Handling**: Wraps OnlyOffice events and provides custom callbacks
+- **Promise-based API**: Modern async/await support for document operations
+- **Automatic Cleanup**: Manages editor lifecycle and resource disposal
+
+## Prerequisites
+
+<Warning>
+The OnlyOffice DocsAPI must be loaded before using OnlyOfficeEditorModule. The module checks for the global `DocsAPI` object and will return an error if it's not available.
+</Warning>
+
+```html
+<!-- Load OnlyOffice Document Server API first -->
+<script src="https://your-documentserver/web-apps/apps/api/documents/api.js"></script>
+
+<!-- Then load OnlyOfficeEditorModule -->
+<script src="/path/to/OnlyOfficeEditor.js"></script>
+```
+
+## Core Concepts
+
+### Container ID
+
+Each editor instance is associated with a DOM container element identified by its `id` attribute:
+
+```html
+<div id="editorContainer"></div>
+```
+
+```javascript
+OnlyOfficeEditorModule.init('editorContainer', config);
+```
+
+### Configuration Object
+
+The configuration object follows the OnlyOffice Document Server API structure with extensions:
+
+- `document`: Document metadata and URL
+- `editorConfig`: Editor behavior and customization
+- `events`: Event handlers (managed by the module)
+
+### Options Object
+
+Custom callbacks provided by OnlyOfficeEditorModule:
+
+- `onReady`: Called when the editor application is ready
+- `onDocumentReady`: Called when the document is loaded
+- `onError`: Called on errors
+
+## Available Methods
+
+The module exposes the following public methods:
+
+| Method | Description | Returns |
+|--------|-------------|----------|
+| `init()` | Initialize a new editor instance | `DocEditor` object |
+| `getEditedDocumentUrl()` | Get download URL for the edited document | `Promise<string>` |
+| `getEditedDocumentBlob()` | Get document as Blob object | `Promise<Blob>` |
+| `captureToHiddenField()` | Capture document to hidden field as base64 | `Promise<string>` |
+| `getEditor()` | Get the editor instance | `DocEditor` or `null` |
+| `destroy()` | Destroy an editor instance | `void` |
+
+<Tip>
+See the [Module Methods](/api/javascript/module-methods) page for detailed documentation of each method.
+</Tip>
+
+## Quick Start Example
+
+```javascript
+// Initialize the editor
+var config = {
+    document: {
+        fileType: 'docx',
+        key: 'unique-document-key',
+        title: 'My Document.docx',
+        url: 'https://example.com/document.docx'
+    },
+    documentType: 'word'
+};
+
+var options = {
+    onReady: function() {
+        console.log('Editor is ready');
+    },
+    onDocumentReady: function() {
+        console.log('Document loaded');
+    },
+    onError: function(error) {
+        console.error('Editor error:', error);
+    }
+};
+
+var editor = OnlyOfficeEditorModule.init('editorContainer', config, options);
+
+// Later, get the edited document
+OnlyOfficeEditorModule.getEditedDocumentBlob('editorContainer')
+    .then(function(blob) {
+        // Handle the document blob
+        console.log('Document size:', blob.size);
+    })
+    .catch(function(error) {
+        console.error('Failed to get document:', error);
+    });
+
+// Clean up when done
+OnlyOfficeEditorModule.destroy('editorContainer');
+```
+
+## Browser Compatibility
+
+The module uses modern JavaScript features:
+
+- Promises (ES6)
+- Fetch API
+- FileReader API
+- Arrow functions (in some contexts)
+
+<Note>
+Ensure your target browsers support these features or include appropriate polyfills.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Methods" icon="function" href="/api/javascript/module-methods">
+    Detailed documentation of all available methods
+  </Card>
+  <Card title="Configuration" icon="gear" href="/api/javascript/configuration">
+    Configuration object structure and options
+  </Card>
+</CardGroup>

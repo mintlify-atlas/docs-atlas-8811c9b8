@@ -1,0 +1,322 @@
+---
+title: 'Read-Only Document Viewer'
+description: 'Example of displaying documents in view-only mode without editing capabilities'
+icon: 'eye'
+---
+
+## Overview
+
+View mode allows users to read documents without editing capabilities. This is ideal for document review workflows, displaying final versions, or when users should only have read access.
+
+## Setting View Mode
+
+The OnlyOffice Editor control supports two modes:
+- **edit** - Full editing capabilities (default)
+- **view** - Read-only, no editing allowed
+
+## Implementation
+
+<Tabs>
+  <Tab title="Basic View Mode">
+    Set the `Mode` property to "view" before displaying the document:
+
+    ```csharp
+    protected void btnUpload_Click(object sender, EventArgs e)
+    {
+        if (!fuFile.HasFile)
+        {
+            litStatus.Text = string.Empty;
+            return;
+        }
+
+        // Load the document
+        docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+        
+        // Set to view-only mode
+        docEditor.Mode = "view";
+        
+        litStatus.Text = "<span class='text-success'>Document loaded in view mode</span>";
+    }
+    ```
+  </Tab>
+
+  <Tab title="Declarative Mode">
+    Set the mode directly in the ASPX markup:
+
+    ```aspx
+    <oo:Editor ID="docEditor" runat="server" Mode="view" />
+    ```
+
+    Then load documents normally in code-behind:
+
+    ```csharp
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        if (!IsPostBack)
+        {
+            string filePath = Server.MapPath("~/Documents/report.docx");
+            if (File.Exists(filePath))
+            {
+                docEditor.SetDocumentFromFile(filePath, "Monthly Report");
+            }
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Dynamic Mode Switching">
+    Allow users to toggle between edit and view modes:
+
+    ```aspx
+    <asp:Button ID="btnToggleMode" runat="server" 
+                Text="Toggle Mode" 
+                OnClick="btnToggleMode_Click" />
+    <asp:Label ID="lblCurrentMode" runat="server" />
+    <oo:Editor ID="docEditor" runat="server" />
+    ```
+
+    ```csharp
+    protected void btnToggleMode_Click(object sender, EventArgs e)
+    {
+        // Toggle between modes
+        docEditor.Mode = docEditor.Mode == "edit" ? "view" : "edit";
+        lblCurrentMode.Text = $"Current mode: {docEditor.Mode}";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Complete View-Only Page Example
+
+Here's a complete example of a document viewer page:
+
+### ASPX Markup
+
+```aspx DocumentViewer.aspx
+<%@ Page Title="Document Viewer" Language="C#" 
+         MasterPageFile="~/Site.Master" AutoEventWireup="true" 
+         CodeBehind="DocumentViewer.aspx.cs" 
+         Inherits="OnlyOfficeControl.DocumentViewer" ValidateRequest="false" %>
+<%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+             TagPrefix="oo" TagName="Editor" %>
+
+<asp:Content ID="BodyContent" ContentPlaceHolderID="MainContent" runat="server">
+    <link rel="stylesheet" href="<%= ResolveUrl("~/Content/WebEditor.css") %>" />
+
+    <div class="we">
+        <section class="we-toolbar">
+            <div class="we-toolbar__left">
+                <h2>Document Viewer</h2>
+            </div>
+            <div class="we-toolbar__right">
+                <asp:Button ID="btnDownloadPdf" runat="server" 
+                            Text="Download as PDF" 
+                            CssClass="btn we-btn we-btn-accent" 
+                            OnClick="btnDownloadPdf_Click" />
+            </div>
+        </section>
+
+        <div class="we-surface">
+            <div class="we-surface__head">
+                <div class="we-surface__title">
+                    <asp:Literal ID="litDocumentName" runat="server" />
+                </div>
+                <div class="we-surface__meta">Read-only view</div>
+            </div>
+            <oo:Editor ID="docEditor" runat="server" Mode="view" />
+        </div>
+    </div>
+</asp:Content>
+```
+
+### Code-Behind
+
+```csharp DocumentViewer.aspx.cs
+using System;
+using System.IO;
+using System.Web.UI;
+
+namespace OnlyOfficeControl
+{
+    public partial class DocumentViewer : Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (!IsPostBack)
+            {
+                LoadDocument();
+            }
+        }
+
+        private void LoadDocument()
+        {
+            // Get document ID from query string
+            string docId = Request.QueryString["id"];
+            if (string.IsNullOrEmpty(docId))
+            {
+                // Load a default document
+                docId = "sample";
+            }
+
+            string filePath = Server.MapPath($"~/Documents/{docId}.docx");
+            if (File.Exists(filePath))
+            {
+                docEditor.SetDocumentFromFile(filePath);
+                litDocumentName.Text = Path.GetFileNameWithoutExtension(filePath);
+            }
+            else
+            {
+                litDocumentName.Text = "Document not found";
+            }
+        }
+
+        protected void btnDownloadPdf_Click(object sender, EventArgs e)
+        {
+            if (!docEditor.HasDocument)
+                return;
+
+            try
+            {
+                // Convert to PDF and download
+                byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+                
+                Response.Clear();
+                Response.ContentType = "application/pdf";
+                Response.AddHeader("Content-Disposition", 
+                    $"attachment; filename={docEditor.DocumentName}.pdf");
+                Response.BinaryWrite(pdfBytes);
+                Response.End();
+            }
+            catch (Exception ex)
+            {
+                // Handle error
+                Response.Write($"Error: {ex.Message}");
+            }
+        }
+    }
+}
+```
+
+## View Mode Features
+
+When in view mode, the editor:
+
+<CardGroup cols={2}>
+  <Card title="Read-Only Content" icon="lock">
+    Users cannot modify text, formatting, or document structure
+  </Card>
+  
+  <Card title="Full Navigation" icon="arrows">
+    Users can scroll, zoom, and navigate through the document
+  </Card>
+  
+  <Card title="Search Functionality" icon="magnifying-glass">
+    Built-in search allows users to find text within the document
+  </Card>
+  
+  <Card title="Print Support" icon="print">
+    Users can print the document directly from the viewer
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+### Document Approval Workflow
+
+```csharp
+protected void ShowDocumentForApproval(string documentPath, string reviewer)
+{
+    // Load document in view mode for review
+    docEditor.SetDocumentFromFile(documentPath);
+    docEditor.Mode = "view";
+    docEditor.UserDisplayName = reviewer;
+    
+    lblStatus.Text = "Please review the document and approve or reject.";
+}
+
+protected void btnApprove_Click(object sender, EventArgs e)
+{
+    // Document approved - allow editing
+    docEditor.Mode = "edit";
+    lblStatus.Text = "Document approved. You can now make changes.";
+}
+```
+
+### Public Document Display
+
+```csharp
+protected void DisplayPublicDocument(string documentId)
+{
+    // Always show public documents in view-only mode
+    string filePath = Server.MapPath($"~/Public/{documentId}.docx");
+    docEditor.SetDocumentFromFile(filePath);
+    docEditor.Mode = "view";
+    
+    // Hide editing-related controls
+    pnlEditingTools.Visible = false;
+}
+```
+
+## Configuration Options
+
+### Language Settings
+
+```csharp
+// Set the editor language for view mode
+docEditor.Lang = "es";  // Spanish
+docEditor.Lang = "fr";  // French
+docEditor.Lang = "de";  // German
+```
+
+### User Information
+
+Even in view mode, you can set user information for tracking:
+
+```csharp
+docEditor.UserId = "viewer123";
+docEditor.UserDisplayName = "John Doe (Reviewer)";
+```
+
+## Comparison: Edit vs View Mode
+
+| Feature | Edit Mode | View Mode |
+|---------|-----------|----------|
+| Read content | ✅ | ✅ |
+| Modify text | ✅ | ❌ |
+| Format content | ✅ | ❌ |
+| Add comments | ✅ | ❌ |
+| Search | ✅ | ✅ |
+| Print | ✅ | ✅ |
+| Download | ✅ | ✅ |
+| Navigation | ✅ | ✅ |
+| Zoom | ✅ | ✅ |
+
+## Security Considerations
+
+<Warning>
+  View mode prevents editing in the UI, but you should still implement server-side security to prevent unauthorized modifications.
+</Warning>
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    // Check user permissions
+    if (!User.HasPermission("edit_documents"))
+    {
+        // Force view mode for users without edit permission
+        docEditor.Mode = "view";
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PDF Export" icon="file-pdf" href="/examples/pdf-export">
+    Learn how to export documents to PDF
+  </Card>
+  
+  <Card title="Simple Editor" icon="pen-to-square" href="/examples/simple-editor">
+    See the basic editor setup with full editing
+  </Card>
+</CardGroup>

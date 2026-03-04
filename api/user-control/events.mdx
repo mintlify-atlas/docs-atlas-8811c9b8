@@ -1,0 +1,569 @@
+---
+title: 'Events & Client Integration'
+description: 'Client-side events and JavaScript integration for OnlyOfficeEditor UserControl'
+---
+
+## Overview
+
+The OnlyOfficeEditor control uses client-side JavaScript for real-time interaction with the OnlyOffice Document Server editor. While it doesn't expose traditional ASP.NET server-side events, it provides a rich client-side integration model.
+
+## Page Lifecycle Events
+
+The control hooks into ASP.NET page lifecycle events internally:
+
+### Page_Load
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+```
+
+**Location**: Line 253-255
+
+**Purpose**: Reserved for initialization logic (currently empty).
+
+---
+
+### Page_PreRender
+
+```csharp
+protected void Page_PreRender(object sender, EventArgs e)
+```
+
+**Location**: Line 257-261
+
+**Purpose**: 
+- Generates the editor configuration JSON (`ConfigJson` property)
+- Registers all necessary client scripts
+- Injects capture trigger functionality
+
+**Behavior**:
+```csharp
+ConfigJson = HasDocument ? BuildConfigJson() : "null";
+RegisterTriggerScripts();
+```
+
+<Note>
+The PreRender phase is critical for proper editor initialization. All client-side scripts and configuration are injected at this stage.
+</Note>
+
+---
+
+## Client Script Registration
+
+The control automatically registers several client-side scripts during the PreRender phase.
+
+### OnlyOffice API Script
+
+**Purpose**: Loads the main OnlyOffice Document Server API JavaScript file.
+
+**Registration** (Line 437-439):
+```csharp
+var apiKey = "oo_api_script_" + uid;
+if (!cs.IsClientScriptIncludeRegistered(type, apiKey))
+    cs.RegisterClientScriptInclude(type, apiKey, OnlyOfficeApiUrl);
+```
+
+**Result**:
+```html
+<script src="https://docserver.example.com/web-apps/apps/api/documents/api.js"></script>
+```
+
+---
+
+### Editor Module Script
+
+**Purpose**: Loads the custom JavaScript module that wraps OnlyOffice API functionality.
+
+**Registration** (Line 441-443):
+```csharp
+var moduleKey = "oo_module_script_" + uid;
+if (!cs.IsClientScriptIncludeRegistered(type, moduleKey))
+    cs.RegisterClientScriptInclude(type, moduleKey, 
+        ResolveUrl("~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.js"));
+```
+
+**Result**:
+```html
+<script src="/Controls/OnlyOfficeEditor/OnlyOfficeEditor.js"></script>
+```
+
+---
+
+### Proxy URL Script
+
+**Purpose**: Exposes the proxy handler URL to client-side JavaScript for CORS handling.
+
+**Registration** (Line 445-451):
+```csharp
+var proxyKey = "oo_proxy_url_" + uid;
+if (!cs.IsStartupScriptRegistered(type, proxyKey))
+{
+    var proxyUrl = ResolveUrl("~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=proxy&url=");
+    var proxyScript = string.Format("window.__onlyOfficeProxyUrl='{0}';", proxyUrl);
+    cs.RegisterStartupScript(type, proxyKey, proxyScript, true);
+}
+```
+
+**Result**:
+```html
+<script type="text/javascript">
+    window.__onlyOfficeProxyUrl='/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=proxy&url=';
+</script>
+```
+
+---
+
+### Editor Initialization Script
+
+**Purpose**: Initializes the OnlyOffice editor with configuration when the page loads.
+
+**Registration** (Line 453-460):
+```csharp
+var initKey = "oo_init_" + uid;
+if (!cs.IsStartupScriptRegistered(type, initKey))
+{
+    var initScript = string.Format(
+        @"(function(){{ var cfg={0}; if(cfg) OnlyOfficeEditorModule.init('{1}',cfg); }})();",
+        ConfigJson, EditorContainerId);
+    cs.RegisterStartupScript(type, initKey, initScript, true);
+}
+```
+
+**Result**:
+```html
+<script type="text/javascript">
+    (function(){ 
+        var cfg={"token":"...","document":{...},"documentType":"word","editorConfig":{...}}; 
+        if(cfg) OnlyOfficeEditorModule.init('MyEditor_editor',cfg); 
+    })();
+</script>
+```
+
+---
+
+## Capture Trigger Mechanism
+
+The `CaptureTriggerId` property enables automatic capture of edited content when specified buttons are clicked.
+
+### How It Works
+
+**Registration** (Line 462-484):
+```csharp
+if (string.IsNullOrWhiteSpace(CaptureTriggerId)) return;
+
+var ids = CaptureTriggerId.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+foreach (var rawId in ids)
+{
+    var id = rawId.Trim();
+    if (string.IsNullOrEmpty(id)) continue;
+
+    var capBtn = FindControlRecursive(Page, id);
+    if (capBtn == null) continue;
+
+    var capJs = string.Format(
+        "if(typeof OnlyOfficeEditorModule!=='undefined'){{OnlyOfficeEditorModule.captureToHiddenField('{0}','{1}',{{autoPostBack:true,postBackTarget:'{2}'}}).catch(function(e){{console.error(e)}});}};return false;",
+        EditorContainerId,
+        hfEditedDocumentBase64.ClientID,
+        capBtn.UniqueID);
+
+    if (capBtn is IAttributeAccessor acc)
+        acc.SetAttribute("onclick", capJs);
+    else if (capBtn is WebControl wc)
+        wc.Attributes["onclick"] = capJs;
+}
+```
+
+### Usage Example
+
+**ASPX**:
+```aspx
+<oo:Editor 
+    ID="MyEditor" 
+    runat="server"
+    CaptureTriggerId="btnSave,btnSaveAndClose"
+/>
+
+<asp:Button ID="btnSave" runat="server" Text="Save" OnClick="btnSave_Click" />
+<asp:Button ID="btnSaveAndClose" runat="server" Text="Save & Close" OnClick="btnSaveAndClose_Click" />
+```
+
+**Code-Behind**:
+```csharp
+protected void btnSave_Click(object sender, EventArgs e)
+{
+    // Document is already captured by client-side script
+    if (MyEditor.HasEditedDocument)
+    {
+        byte[] doc = MyEditor.GetEditedDocumentBytes();
+        SaveToDatabase(doc);
+        MyEditor.ClearEditedDocument();
+    }
+}
+```
+
+**Generated onclick attribute** (Line 473-477):
+```javascript
+if(typeof OnlyOfficeEditorModule!=='undefined'){
+    OnlyOfficeEditorModule.captureToHiddenField(
+        'MyEditor_editor',
+        'MyEditor_hfEditedDocumentBase64',
+        {autoPostBack:true, postBackTarget:'btnSave'}
+    ).catch(function(e){console.error(e)});
+};
+return false;
+```
+
+### Capture Flow
+
+1. User clicks button with ID in `CaptureTriggerId`
+2. Onclick handler calls `OnlyOfficeEditorModule.captureToHiddenField`
+3. JavaScript API retrieves current document from OnlyOffice editor
+4. Document is encoded as Base64 and stored in hidden field
+5. `autoPostBack: true` triggers `__doPostBack` to fire server-side event
+6. Server-side click handler can access document via `GetEditedDocumentBytes()`
+
+<Note>
+The `return false;` prevents default button behavior until capture completes, but the JavaScript triggers postback explicitly.
+</Note>
+
+---
+
+## JavaScript Module API
+
+The `OnlyOfficeEditor.js` module (referenced in Line 443) provides the JavaScript interface.
+
+### Expected Module Methods
+
+<ParamField path="OnlyOfficeEditorModule.init" type="function">
+  Initializes the OnlyOffice editor in the specified container.
+  
+  **Signature**:
+  ```javascript
+  OnlyOfficeEditorModule.init(containerId, config)
+  ```
+  
+  **Parameters**:
+  - `containerId` (string): ID of the HTML element to host the editor
+  - `config` (object): Editor configuration with token, document, documentType, editorConfig
+  
+  **Called by**: Editor initialization script (Line 458)
+</ParamField>
+
+<ParamField path="OnlyOfficeEditorModule.captureToHiddenField" type="function">
+  Captures the current document content from the editor and stores it in a hidden field.
+  
+  **Signature**:
+  ```javascript
+  OnlyOfficeEditorModule.captureToHiddenField(containerId, hiddenFieldId, options)
+  ```
+  
+  **Parameters**:
+  - `containerId` (string): ID of the editor container
+  - `hiddenFieldId` (string): ID of the hidden field to store Base64 data
+  - `options` (object):
+    - `autoPostBack` (boolean): Whether to trigger postback after capture
+    - `postBackTarget` (string): UniqueID of the control that triggered capture
+  
+  **Returns**: Promise that resolves when capture completes
+  
+  **Called by**: Capture trigger onclick handlers (Line 473-477)
+</ParamField>
+
+### Custom JavaScript Integration
+
+You can integrate custom JavaScript by accessing the module directly:
+
+```html
+<script type="text/javascript">
+    function manualCapture() {
+        var editorId = '<%= MyEditor.EditorContainerId %>';
+        var hiddenFieldId = '<%= MyEditor.HiddenFieldClientId %>';
+        
+        OnlyOfficeEditorModule.captureToHiddenField(
+            editorId, 
+            hiddenFieldId,
+            { autoPostBack: false }
+        ).then(function() {
+            alert('Document captured successfully!');
+            // Access the captured data
+            var base64 = document.getElementById(hiddenFieldId).value;
+            console.log('Captured ' + base64.length + ' bytes');
+        }).catch(function(error) {
+            alert('Capture failed: ' + error.message);
+        });
+    }
+    
+    function getEditorInstance() {
+        // Access the underlying OnlyOffice editor instance
+        var containerId = '<%= MyEditor.EditorContainerId %>';
+        // The module should expose the instance
+        return OnlyOfficeEditorModule.getEditor(containerId);
+    }
+</script>
+
+<button type="button" onclick="manualCapture()">Manual Capture</button>
+```
+
+---
+
+## OnlyOffice Editor Events
+
+While the control doesn't directly expose OnlyOffice editor events, you can subscribe to them by extending the JavaScript module.
+
+### Available OnlyOffice Events
+
+The OnlyOffice Document Editor API provides these events:
+
+<ResponseField name="onDocumentReady" type="event">
+  Fired when the document is loaded and the editor is ready.
+  
+  ```javascript
+  config.events = {
+      'onDocumentReady': function() {
+          console.log('Editor ready');
+      }
+  };
+  ```
+</ResponseField>
+
+<ResponseField name="onDocumentStateChange" type="event">
+  Fired when the document is modified.
+  
+  ```javascript
+  config.events = {
+      'onDocumentStateChange': function(event) {
+          console.log('Document modified:', event.data);
+      }
+  };
+  ```
+</ResponseField>
+
+<ResponseField name="onRequestSaveAs" type="event">
+  Fired when user clicks "Save As" in the editor.
+  
+  ```javascript
+  config.events = {
+      'onRequestSaveAs': function(event) {
+          var url = event.data.url;
+          var title = event.data.title;
+          console.log('Save as:', title, url);
+      }
+  };
+  ```
+</ResponseField>
+
+<ResponseField name="onError" type="event">
+  Fired when an error occurs in the editor.
+  
+  ```javascript
+  config.events = {
+      'onError': function(event) {
+          console.error('Editor error:', event.data);
+      }
+  };
+  ```
+</ResponseField>
+
+<ResponseField name="onWarning" type="event">
+  Fired when a warning occurs.
+  
+  ```javascript
+  config.events = {
+      'onWarning': function(event) {
+          console.warn('Editor warning:', event.data);
+      }
+  };
+  ```
+</ResponseField>
+
+### Extending the Module for Events
+
+To subscribe to OnlyOffice events, modify `OnlyOfficeEditor.js`:
+
+```javascript
+// In OnlyOfficeEditor.js
+var OnlyOfficeEditorModule = (function() {
+    var editors = {};
+    
+    function init(containerId, config) {
+        // Add custom event handlers
+        config.events = config.events || {};
+        
+        // Document ready handler
+        config.events.onDocumentReady = function() {
+            console.log('[' + containerId + '] Editor ready');
+            if (window.onOnlyOfficeReady) {
+                window.onOnlyOfficeReady(containerId);
+            }
+        };
+        
+        // Document state change handler
+        config.events.onDocumentStateChange = function(event) {
+            console.log('[' + containerId + '] Document changed');
+            if (window.onOnlyOfficeChange) {
+                window.onOnlyOfficeChange(containerId, event);
+            }
+        };
+        
+        // Error handler
+        config.events.onError = function(event) {
+            console.error('[' + containerId + '] Editor error:', event.data);
+            if (window.onOnlyOfficeError) {
+                window.onOnlyOfficeError(containerId, event);
+            }
+        };
+        
+        // Initialize editor
+        var editor = new DocsAPI.DocEditor(containerId, config);
+        editors[containerId] = editor;
+        
+        return editor;
+    }
+    
+    function getEditor(containerId) {
+        return editors[containerId];
+    }
+    
+    // ... rest of module
+    
+    return {
+        init: init,
+        getEditor: getEditor,
+        captureToHiddenField: captureToHiddenField
+    };
+})();
+```
+
+Then in your page:
+
+```html
+<script type="text/javascript">
+    window.onOnlyOfficeReady = function(containerId) {
+        console.log('Editor ' + containerId + ' is ready!');
+        // Enable save button, etc.
+        document.getElementById('btnSave').disabled = false;
+    };
+    
+    window.onOnlyOfficeChange = function(containerId, event) {
+        console.log('Editor ' + containerId + ' has unsaved changes');
+        // Show unsaved changes indicator
+        document.getElementById('unsavedIndicator').style.display = 'block';
+    };
+    
+    window.onOnlyOfficeError = function(containerId, event) {
+        alert('Editor error: ' + event.data);
+    };
+</script>
+```
+
+---
+
+## Callback Handler Events
+
+The OnlyOffice Document Server sends HTTP POST callbacks to the `CallbackUrl` with document status updates.
+
+### Callback Statuses
+
+<ResponseField name="status: 0" type="NotFound">
+  Document not found or user never opened it.
+</ResponseField>
+
+<ResponseField name="status: 1" type="Editing">
+  Document is being edited.
+</ResponseField>
+
+<ResponseField name="status: 2" type="MustSave">
+  Document is ready for saving (user closed editor or triggered save).
+  
+  **Payload includes**:
+  - `url`: Download URL for the edited document
+  - `key`: Document key
+  - `users`: Array of user IDs who edited
+</ResponseField>
+
+<ResponseField name="status: 3" type="Corrupted">
+  Document saving error occurred.
+</ResponseField>
+
+<ResponseField name="status: 4" type="Closed">
+  Document is closed with no changes.
+</ResponseField>
+
+<ResponseField name="status: 6" type="ForceSave">
+  Document is being forcibly saved.
+</ResponseField>
+
+<ResponseField name="status: 7" type="CorruptedForceSave">
+  Error occurred during force save.
+</ResponseField>
+
+### Callback Handler Example
+
+The `OnlyOfficeHandler.ashx` should handle callbacks:
+
+```csharp
+// OnlyOfficeHandler.ashx.cs
+if (action == "callback")
+{
+    string fileId = Request.QueryString["fileId"];
+    
+    // Read callback JSON
+    string json;
+    using (var reader = new StreamReader(Request.InputStream))
+    {
+        json = reader.ReadToEnd();
+    }
+    
+    var serializer = new JavaScriptSerializer();
+    var payload = serializer.Deserialize<Dictionary<string, object>>(json);
+    
+    int status = Convert.ToInt32(payload["status"]);
+    
+    if (status == 2 || status == 6) // MustSave or ForceSave
+    {
+        string downloadUrl = payload["url"].ToString();
+        
+        // Download edited document from OnlyOffice
+        byte[] editedDoc;
+        using (var client = new WebClient())
+        {
+            editedDoc = client.DownloadData(downloadUrl);
+        }
+        
+        // Save to permanent storage
+        string path = MapPath($"~/App_Data/uploads/{fileId}_final.docx");
+        File.WriteAllBytes(path, editedDoc);
+        
+        // Return success response
+        Response.ContentType = "application/json";
+        Response.Write("{\"error\":0}");
+    }
+    else
+    {
+        // Acknowledge other statuses
+        Response.ContentType = "application/json";
+        Response.Write("{\"error\":0}");
+    }
+}
+```
+
+<Warning>
+The callback handler must return `{"error":0}` to acknowledge receipt. If it returns an error or times out, the Document Server will retry.
+</Warning>
+
+---
+
+## Summary
+
+The OnlyOfficeEditor control integrates with the client primarily through:
+
+1. **Automatic script registration** in PreRender phase
+2. **Capture trigger mechanism** via `CaptureTriggerId`
+3. **JavaScript module API** in OnlyOfficeEditor.js
+4. **OnlyOffice editor events** (customizable)
+5. **Server callback handler** for document save events
+
+This architecture separates concerns:
+- **Server-side**: Configuration, security, document management
+- **Client-side**: Real-time editing, user interaction, capture
+- **Document Server**: Editor rendering, collaboration, conversion

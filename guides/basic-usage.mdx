@@ -1,0 +1,234 @@
+---
+title: 'Basic Usage'
+description: 'Learn how to register the OnlyOffice control, set properties, load documents, and display the editor in your ASP.NET application'
+---
+
+## Overview
+
+The OnlyOffice Control for ASP.NET provides a simple way to integrate document editing capabilities into your web applications. This guide covers the fundamental steps to get started.
+
+## Registering the Control
+
+First, register the OnlyOffice control in your ASPX page:
+
+```aspx
+<%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+    TagPrefix="oo" 
+    TagName="Editor" %>
+```
+
+Then add the control to your page markup:
+
+```aspx
+<oo:Editor ID="docEditor" runat="server" />
+```
+
+## Essential Properties
+
+Configure the control by setting these key properties in your code-behind:
+
+<Steps>
+
+### Configure OnlyOffice Server URL
+
+Set the URL to your OnlyOffice Document Server API:
+
+```csharp
+docEditor.OnlyOfficeApiUrl = "https://your-server.com/web-apps/apps/api/documents/api.js";
+```
+
+### Set JWT Secret
+
+Provide the JWT secret that matches your OnlyOffice server configuration:
+
+```csharp
+docEditor.JwtSecret = "your_jwt_secret_key";
+```
+
+<Warning>
+The JWT secret must match exactly with the secret configured on your OnlyOffice Document Server. Mismatched secrets will cause authentication failures.
+</Warning>
+
+### Configure Public Base URL
+
+Set the public URL where your application is accessible:
+
+```csharp
+docEditor.PublicBaseUrl = "https://your-app.com";
+```
+
+<Note>
+This URL is used to generate callback and download URLs that the OnlyOffice server needs to access.
+</Note>
+
+</Steps>
+
+## Loading a Document
+
+There are three primary methods to load documents into the editor:
+
+### From Byte Array
+
+Load a document from a byte array in memory:
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    if (!IsPostBack)
+    {
+        string sampleFilePath = Server.MapPath("~/doc.docx");
+        if (File.Exists(sampleFilePath))
+        {
+            byte[] fileBytes = File.ReadAllBytes(sampleFilePath);
+            docEditor.SetDocumentFromBytes(fileBytes, "doc.docx");
+        }
+    }
+}
+```
+
+### From File Upload
+
+Load a document from a FileUpload control:
+
+```csharp
+protected void btnUpload_Click(object sender, EventArgs e)
+{
+    if (!fuFile.HasFile)
+        return;
+    
+    docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+}
+```
+
+### From Server File Path
+
+Load a document directly from a file path on the server:
+
+```csharp
+string serverPath = Server.MapPath("~/Documents/report.docx");
+docEditor.SetDocumentFromFile(serverPath, "Monthly Report.docx");
+```
+
+## Displaying the Editor
+
+Once a document is loaded, the editor renders automatically. The control generates:
+
+- A container div for the editor (`OnlyOfficeEditor.ascx.cs:66`)
+- JavaScript initialization code
+- Configuration with JWT tokens
+- Event handlers for document callbacks
+
+### Checking Document Status
+
+You can verify if a document is loaded:
+
+```csharp
+if (docEditor.HasDocument)
+{
+    // Document is loaded and ready
+    litStatus.Text = "Document loaded: " + docEditor.DocumentName;
+}
+```
+
+## Editor Modes
+
+Set the editor mode based on your requirements:
+
+```csharp
+// Edit mode (default)
+docEditor.Mode = "edit";
+
+// View-only mode
+docEditor.Mode = "view";
+```
+
+## Customizing Appearance
+
+### Editor Height
+
+Adjust the editor container height:
+
+```csharp
+docEditor.EditorHeight = "600px";
+```
+
+### Language
+
+Set the editor interface language:
+
+```csharp
+docEditor.Lang = "es"; // Spanish
+docEditor.Lang = "en"; // English
+```
+
+## User Configuration
+
+Set user information that appears in the editor:
+
+```csharp
+docEditor.UserId = "123";
+docEditor.UserDisplayName = "John Doe";
+```
+
+<Tip>
+User information is important for collaboration features and document history tracking.
+</Tip>
+
+## Complete Example
+
+Here's a complete example integrating all the basics:
+
+```csharp
+using System;
+using System.IO;
+using System.Web.UI;
+
+namespace YourApp
+{
+    public partial class DocumentEditor : Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (!IsPostBack)
+            {
+                // Configure OnlyOffice connection
+                docEditor.OnlyOfficeApiUrl = "https://docserver.example.com/web-apps/apps/api/documents/api.js";
+                docEditor.JwtSecret = "your_secret_key";
+                docEditor.PublicBaseUrl = "https://yourapp.example.com";
+                
+                // Set editor preferences
+                docEditor.Mode = "edit";
+                docEditor.Lang = "en";
+                docEditor.EditorHeight = "650px";
+                
+                // Set user info
+                docEditor.UserId = Session["UserId"]?.ToString() ?? "1";
+                docEditor.UserDisplayName = Session["UserName"]?.ToString() ?? "Guest";
+            }
+        }
+        
+        protected void btnUpload_Click(object sender, EventArgs e)
+        {
+            if (!fuFile.HasFile)
+            {
+                lblMessage.Text = "Please select a file";
+                return;
+            }
+            
+            docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+            lblMessage.Text = "Document loaded: " + fuFile.FileName;
+        }
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Document Upload" icon="upload" href="/guides/document-upload">
+    Learn advanced file upload and storage techniques
+  </Card>
+  <Card title="Advanced Configuration" icon="gear" href="/guides/advanced-configuration">
+    Customize editor behavior and security settings
+  </Card>
+</CardGroup>

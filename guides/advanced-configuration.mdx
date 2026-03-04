@@ -1,0 +1,590 @@
+---
+title: 'Advanced Configuration'
+description: 'Customize editor behavior, configure JWT tokens, set up proxy handling, and implement callback mechanisms'
+---
+
+## Overview
+
+The OnlyOffice Control provides extensive configuration options for customizing the editor behavior, security settings, and integration with your application.
+
+## Editor Customization
+
+### Document Configuration
+
+The editor configuration is built dynamically based on properties set on the control (`OnlyOfficeEditor.ascx.cs:263-296`):
+
+```csharp
+private string BuildConfigJson()
+{
+    var ext = Path.GetExtension(DocumentName);
+    var fileType = string.IsNullOrWhiteSpace(ext) ? "" : ext.TrimStart('.');
+    
+    var config = new
+    {
+        document = new
+        {
+            fileType,
+            key = DocumentKey,
+            title = DocumentName,
+            url = DocumentUrl
+        },
+        documentType = ResolveDocumentType(fileType),
+        editorConfig = new
+        {
+            callbackUrl = CallbackUrl ?? "",
+            mode = Mode ?? "edit",
+            lang = Lang ?? "es",
+            user = new { id = UserId ?? "1", name = UserDisplayName ?? "Usuario" }
+        }
+    };
+    
+    var serializer = new JavaScriptSerializer();
+    var json = serializer.Serialize(config);
+    var token = OnlyOfficeJwt.Create(json, JwtSecret);
+    
+    return "{\"token\":" + serializer.Serialize(token)
+        + ",\"document\":" + serializer.Serialize(config.document)
+        + ",\"documentType\":" + serializer.Serialize(config.documentType)
+        + ",\"editorConfig\":" + serializer.Serialize(config.editorConfig)
+        + "}";
+}
+```
+
+### Configuration Properties
+
+<AccordionGroup>
+  <Accordion title="OnlyOfficeApiUrl" icon="link">
+    **Description:** URL to the OnlyOffice Document Server API
+    
+    **Default:** `"https://doclinea.pjhidalgo.gob.mx:4443/web-apps/apps/api/documents/api.js"`
+    
+    **Usage:**
+    ```csharp
+    docEditor.OnlyOfficeApiUrl = "https://your-server.com/web-apps/apps/api/documents/api.js";
+    ```
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:44`
+  </Accordion>
+  
+  <Accordion title="JwtSecret" icon="key">
+    **Description:** Secret key for JWT token generation and validation
+    
+    **Default:** `"JGbxwFgrXgMcMrknjdxI"`
+    
+    **Usage:**
+    ```csharp
+    docEditor.JwtSecret = "your_secure_secret_key_here";
+    ```
+    
+    <Warning>
+    This must match the secret configured in your OnlyOffice Document Server's `local.json` configuration file.
+    </Warning>
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:48`
+  </Accordion>
+  
+  <Accordion title="PublicBaseUrl" icon="globe">
+    **Description:** Public base URL where your application is accessible
+    
+    **Default:** `"https://192.168.10.34:44311"`
+    
+    **Usage:**
+    ```csharp
+    docEditor.PublicBaseUrl = "https://yourapp.example.com";
+    ```
+    
+    **Purpose:** Used to generate absolute URLs for document downloads and callbacks that the OnlyOffice server needs to access.
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:50`
+  </Accordion>
+  
+  <Accordion title="Mode" icon="edit">
+    **Description:** Editor mode (edit or view)
+    
+    **Default:** `"edit"`
+    
+    **Options:**
+    - `"edit"` - Full editing capabilities
+    - `"view"` - Read-only mode
+    
+    **Usage:**
+    ```csharp
+    docEditor.Mode = "view";
+    ```
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:54`
+  </Accordion>
+  
+  <Accordion title="Lang" icon="language">
+    **Description:** Editor interface language
+    
+    **Default:** `"es"` (Spanish)
+    
+    **Usage:**
+    ```csharp
+    docEditor.Lang = "en"; // English
+    docEditor.Lang = "fr"; // French
+    docEditor.Lang = "de"; // German
+    ```
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:56`
+  </Accordion>
+  
+  <Accordion title="EditorHeight" icon="arrows-up-down">
+    **Description:** Height of the editor container
+    
+    **Default:** `"520px"`
+    
+    **Usage:**
+    ```csharp
+    docEditor.EditorHeight = "800px";
+    docEditor.EditorHeight = "100vh";
+    ```
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:58`
+  </Accordion>
+  
+  <Accordion title="UserId & UserDisplayName" icon="user">
+    **Description:** User identification for collaboration and tracking
+    
+    **Defaults:** 
+    - UserId: `"1"`
+    - UserDisplayName: `"Usuario"`
+    
+    **Usage:**
+    ```csharp
+    docEditor.UserId = Session["UserId"].ToString();
+    docEditor.UserDisplayName = Session["UserName"].ToString();
+    ```
+    
+    **Location:** `OnlyOfficeEditor.ascx.cs:60-62`
+  </Accordion>
+</AccordionGroup>
+
+## JWT Token Configuration
+
+### JWT Implementation
+
+The control uses HS256 (HMAC-SHA256) for JWT token generation (`OnlyOfficeJwt.cs:9-25`):
+
+```csharp
+public static string Create(string payloadJson, string secret)
+{
+    if (payloadJson == null) payloadJson = "{}";
+    if (string.IsNullOrWhiteSpace(secret)) secret = "secret";
+    
+    var headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    var header = Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
+    var payload = Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
+    var unsignedToken = header + "." + payload;
+    
+    using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret)))
+    {
+        var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(unsignedToken));
+        var signature = Base64UrlEncode(signatureBytes);
+        return unsignedToken + "." + signature;
+    }
+}
+```
+
+### Base64URL Encoding
+
+Special URL-safe base64 encoding is used (`OnlyOfficeJwt.cs:27-33`):
+
+```csharp
+private static string Base64UrlEncode(byte[] bytes)
+{
+    var s = Convert.ToBase64String(bytes);
+    s = s.Split('=')[0];                    // Remove padding
+    s = s.Replace('+', '-').Replace('/', '_'); // Make URL-safe
+    return s;
+}
+```
+
+### Securing Your JWT Secret
+
+<Warning>
+NEVER hardcode JWT secrets in production. Use secure configuration methods:
+</Warning>
+
+```csharp
+// From web.config
+docEditor.JwtSecret = ConfigurationManager.AppSettings["OnlyOffice:JwtSecret"];
+
+// From environment variable
+docEditor.JwtSecret = Environment.GetEnvironmentVariable("ONLYOFFICE_JWT_SECRET");
+
+// From Azure Key Vault or similar
+docEditor.JwtSecret = await KeyVaultClient.GetSecretAsync("onlyoffice-jwt-secret");
+```
+
+**web.config example:**
+
+```xml
+<configuration>
+  <appSettings>
+    <add key="OnlyOffice:JwtSecret" value="your_secure_secret_here" />
+    <add key="OnlyOffice:ApiUrl" value="https://docserver.example.com/web-apps/apps/api/documents/api.js" />
+    <add key="OnlyOffice:PublicBaseUrl" value="https://yourapp.example.com" />
+  </appSettings>
+</configuration>
+```
+
+## Callback Handling
+
+### Callback Mechanism
+
+The OnlyOffice server sends callbacks when users save documents. The handler processes these callbacks (`OnlyOfficeHandler.ashx.cs:71-109`):
+
+```csharp
+private static void Callback(HttpContext context)
+{
+    string body;
+    using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
+    {
+        body = reader.ReadToEnd();
+    }
+    
+    var serializer = new JavaScriptSerializer();
+    var responseObj = new { error = 0 };
+    
+    try
+    {
+        var payload = serializer.Deserialize<OnlyOfficeCallbackPayload>(body);
+        var fileId = context.Request["fileId"];
+        var uploads = UploadsPath(context);
+        var currentPath = ResolveStoredFile(uploads, fileId);
+        
+        if (payload != null && 
+            (payload.status == 2 || payload.status == 6) && 
+            !string.IsNullOrWhiteSpace(payload.url) && 
+            !string.IsNullOrWhiteSpace(currentPath))
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                                   SecurityProtocolType.Tls11 | 
+                                                   SecurityProtocolType.Tls;
+            var req = (HttpWebRequest)WebRequest.Create(payload.url);
+            req.Method = "GET";
+            using (var resp = (HttpWebResponse)req.GetResponse())
+            using (var stream = resp.GetResponseStream())
+            using (var fs = File.Create(currentPath))
+            {
+                stream.CopyTo(fs);
+            }
+        }
+    }
+    catch
+    {
+        responseObj = new { error = 1 };
+    }
+    
+    context.Response.ContentType = "application/json";
+    context.Response.Write(serializer.Serialize(responseObj));
+}
+```
+
+### Callback Status Codes
+
+| Status | Description | Action |
+|--------|-------------|--------|
+| 0 | Document not found | None |
+| 1 | Document being edited | None |
+| 2 | Document ready for saving | Download and save |
+| 3 | Document saving error | Handle error |
+| 4 | Document closed with no changes | None |
+| 6 | Document being edited, force save | Download and save |
+| 7 | Error force saving | Handle error |
+
+### Callback Payload
+
+```csharp
+private class OnlyOfficeCallbackPayload
+{
+    public int status { get; set; }
+    public string url { get; set; }
+}
+```
+
+<Note>
+The callback URL is automatically generated and includes the file ID for proper document identification.
+</Note>
+
+## Proxy Configuration
+
+The handler includes a proxy endpoint for accessing external resources (`OnlyOfficeHandler.ashx.cs:111-149`):
+
+```csharp
+private static void Proxy(HttpContext context)
+{
+    var url = context.Request["url"];
+    if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+    {
+        context.Response.StatusCode = 400;
+        context.Response.Write("Invalid URL");
+        return;
+    }
+    
+    if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+    {
+        context.Response.StatusCode = 400;
+        context.Response.Write("Unsupported URL scheme");
+        return;
+    }
+    
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                           SecurityProtocolType.Tls11 | 
+                                           SecurityProtocolType.Tls;
+    
+    var req = (HttpWebRequest)WebRequest.Create(uri);
+    req.Method = "GET";
+    
+    using (var resp = (HttpWebResponse)req.GetResponse())
+    using (var stream = resp.GetResponseStream())
+    {
+        context.Response.Clear();
+        context.Response.ContentType = string.IsNullOrWhiteSpace(resp.ContentType)
+            ? "application/octet-stream"
+            : resp.ContentType;
+        
+        var contentDisposition = resp.Headers["Content-Disposition"];
+        if (!string.IsNullOrWhiteSpace(contentDisposition))
+            context.Response.AddHeader("Content-Disposition", contentDisposition);
+        
+        stream.CopyTo(context.Response.OutputStream);
+        context.Response.Flush();
+    }
+}
+```
+
+### Proxy URL Registration
+
+The proxy URL is registered in client-side scripts (`OnlyOfficeEditor.ascx.cs:445-451`):
+
+```csharp
+var proxyKey = "oo_proxy_url_" + uid;
+if (!cs.IsStartupScriptRegistered(type, proxyKey))
+{
+    var proxyUrl = ResolveUrl("~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=proxy&url=");
+    var proxyScript = string.Format("window.__onlyOfficeProxyUrl='{0}';", proxyUrl);
+    cs.RegisterStartupScript(type, proxyKey, proxyScript, true);
+}
+```
+
+## Document Type Resolution
+
+The control automatically determines the document type based on file extension (`OnlyOfficeEditor.ascx.cs:411-427`):
+
+```csharp
+private static string ResolveDocumentType(string fileType)
+{
+    switch ((fileType ?? "").ToLowerInvariant())
+    {
+        case "xls":
+        case "xlsx":
+        case "ods":
+        case "csv":
+            return "cell";
+        case "ppt":
+        case "pptx":
+        case "odp":
+            return "slide";
+        default:
+            return "word";
+    }
+}
+```
+
+## Client-Side Integration
+
+The control registers necessary scripts dynamically (`OnlyOfficeEditor.ascx.cs:429-461`):
+
+<Steps>
+
+### Register OnlyOffice API Script
+
+```csharp
+var apiKey = "oo_api_script_" + uid;
+if (!cs.IsClientScriptIncludeRegistered(type, apiKey))
+    cs.RegisterClientScriptInclude(type, apiKey, OnlyOfficeApiUrl);
+```
+
+### Register Module Script
+
+```csharp
+var moduleKey = "oo_module_script_" + uid;
+if (!cs.IsClientScriptIncludeRegistered(type, moduleKey))
+    cs.RegisterClientScriptInclude(type, moduleKey, 
+        ResolveUrl("~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.js"));
+```
+
+### Initialize Editor
+
+```csharp
+var initKey = "oo_init_" + uid;
+if (!cs.IsStartupScriptRegistered(type, initKey))
+{
+    var initScript = string.Format(
+        @"(function(){{ var cfg={0}; if(cfg) OnlyOfficeEditorModule.init('{1}',cfg); }})();",
+        ConfigJson, EditorContainerId);
+    cs.RegisterStartupScript(type, initKey, initScript, true);
+}
+```
+
+</Steps>
+
+## Document Capture Configuration
+
+Capture edited documents using trigger buttons (`OnlyOfficeEditor.ascx.cs:462-484`):
+
+```csharp
+public string CaptureTriggerId { get; set; }
+```
+
+**Usage:**
+
+```aspx
+<oo:Editor ID="docEditor" runat="server" CaptureTriggerId="btnCapture" />
+<asp:Button ID="btnCapture" runat="server" Text="Save Document" />
+```
+
+The control automatically attaches JavaScript to capture the document when the button is clicked:
+
+```csharp
+var capJs = string.Format(
+    "if(typeof OnlyOfficeEditorModule!=='undefined'){{" +
+    "OnlyOfficeEditorModule.captureToHiddenField('{0}','{1}',{{autoPostBack:true,postBackTarget:'{2}'}})" +
+    ".catch(function(e){{console.error(e)}}); }}; return false;",
+    EditorContainerId,
+    hfEditedDocumentBase64.ClientID,
+    capBtn.UniqueID);
+```
+
+### Multiple Capture Triggers
+
+Support multiple buttons:
+
+```aspx
+<oo:Editor ID="docEditor" runat="server" 
+    CaptureTriggerId="btnSave,btnDownload,btnConvert" />
+```
+
+## SSL Certificate Validation
+
+<Warning>
+The control currently disables SSL certificate validation for development purposes. This should be modified for production.
+</Warning>
+
+**Current implementation:**
+
+```csharp
+ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                       SecurityProtocolType.Tls11 | 
+                                       SecurityProtocolType.Tls;
+```
+
+**Production-ready implementation:**
+
+```csharp
+// Remove or make configurable
+if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+{
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+}
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+```
+
+## URL Building
+
+Absolute URLs are generated for callbacks and downloads (`OnlyOfficeEditor.ascx.cs:390-400`):
+
+```csharp
+private string BuildAbsoluteUrl(string virtualPath)
+{
+    var resolved = ResolveUrl(virtualPath);
+    if (!string.IsNullOrWhiteSpace(PublicBaseUrl))
+    {
+        var baseUri = new Uri(PublicBaseUrl.TrimEnd('/') + "/");
+        var rel = resolved.StartsWith("~") ? resolved.Substring(1) : resolved;
+        return new Uri(baseUri, rel.TrimStart('/')).ToString();
+    }
+    return new Uri(Page.Request.Url, resolved).ToString();
+}
+```
+
+<Tip>
+Always set `PublicBaseUrl` when your application is behind a proxy or load balancer, as the request URL may not reflect the actual public URL.
+</Tip>
+
+## Complete Configuration Example
+
+```csharp
+using System;
+using System.Configuration;
+using System.Web.UI;
+
+namespace YourApp
+{
+    public partial class ConfiguredEditor : Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (!IsPostBack)
+            {
+                ConfigureEditor();
+            }
+        }
+        
+        private void ConfigureEditor()
+        {
+            // Load from configuration
+            docEditor.OnlyOfficeApiUrl = ConfigurationManager.AppSettings["OnlyOffice:ApiUrl"];
+            docEditor.JwtSecret = ConfigurationManager.AppSettings["OnlyOffice:JwtSecret"];
+            docEditor.PublicBaseUrl = ConfigurationManager.AppSettings["OnlyOffice:PublicBaseUrl"];
+            
+            // User configuration
+            docEditor.UserId = User.Identity.Name;
+            docEditor.UserDisplayName = GetUserDisplayName();
+            
+            // Editor preferences
+            docEditor.Mode = GetUserPreference("EditorMode", "edit");
+            docEditor.Lang = GetUserLanguage();
+            docEditor.EditorHeight = "100vh";
+            
+            // Capture configuration
+            docEditor.CaptureTriggerId = "btnSave,btnConvert";
+        }
+        
+        private string GetUserDisplayName()
+        {
+            // Retrieve from database or session
+            return Session["UserDisplayName"]?.ToString() ?? "User";
+        }
+        
+        private string GetUserLanguage()
+        {
+            // Detect from browser or user preferences
+            var userLang = Request.UserLanguages?[0]?.Split('-')[0];
+            return userLang ?? "en";
+        }
+        
+        private string GetUserPreference(string key, string defaultValue)
+        {
+            // Retrieve from user settings
+            return Session[key]?.ToString() ?? defaultValue;
+        }
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solve configuration and integration issues
+  </Card>
+  <Card title="Basic Usage" icon="book" href="/guides/basic-usage">
+    Review basic implementation patterns
+  </Card>
+</CardGroup>

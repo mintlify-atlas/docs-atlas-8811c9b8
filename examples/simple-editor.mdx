@@ -1,0 +1,275 @@
+---
+title: 'Simple Editor Setup'
+description: 'Complete example of basic OnlyOffice editor setup with file upload and display'
+icon: 'pen-to-square'
+---
+
+## Overview
+
+This example demonstrates how to set up a basic OnlyOffice document editor with file upload functionality. Users can upload a document and edit it directly in the browser.
+
+## Complete Implementation
+
+<Steps>
+  <Step title="Register the Control">
+    Add the OnlyOffice Editor control registration to your ASPX page:
+
+    ```aspx Default.aspx
+    <%@ Page Title="Home Page" Language="C#" MasterPageFile="~/Site.Master" 
+             AutoEventWireup="true" CodeBehind="Default.aspx.cs" 
+             Inherits="OnlyOfficeControl._Default" ValidateRequest="false" %>
+    <%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+                 TagPrefix="oo" TagName="Editor" %>
+    ```
+
+    <Note>
+      The `ValidateRequest="false"` attribute is required to allow document content submission.
+    </Note>
+  </Step>
+
+  <Step title="Add the Page Markup">
+    Create the upload interface and editor container:
+
+    ```aspx Default.aspx
+    <asp:Content ID="BodyContent" ContentPlaceHolderID="MainContent" runat="server">
+        <style>
+            iframe {
+                height: 700px;  
+            }
+        </style>
+        <link rel="stylesheet" href="<%= ResolveUrl("~/Content/WebEditor.css") %>" />
+
+        <div class="we">
+            <section class="we-toolbar" aria-label="Actions">
+                <div class="we-toolbar__left">
+                    <asp:FileUpload ID="fuFile" runat="server" 
+                                    CssClass="form-control we-input" />
+                </div>
+                <div class="we-toolbar__right">
+                    <asp:Button ID="btnUpload" runat="server" 
+                                Text="Upload and Open" 
+                                CssClass="btn we-btn we-btn-accent" 
+                                OnClick="btnUpload_Click" />
+                </div>
+                <div class="we-toolbar__status">
+                    <asp:Literal ID="litStatus" runat="server" />
+                </div>
+            </section>
+
+            <div class="we-layout">
+                <main class="we-main" aria-label="Editor">
+                    <div class="we-surface">
+                        <div class="we-surface__head">
+                            <div class="we-surface__title">Document</div>
+                            <div class="we-surface__meta">OnlyOffice Editor View</div>
+                        </div>
+                        <oo:Editor ID="docEditor" runat="server" />
+                    </div>
+                </main>
+            </div>
+        </div>
+    </asp:Content>
+    ```
+  </Step>
+
+  <Step title="Implement the Code-Behind">
+    Handle file upload and initialize the editor:
+
+    ```csharp Default.aspx.cs
+    using System;
+    using System.IO;
+    using System.Web.UI;
+
+    namespace OnlyOfficeControl
+    {
+        public partial class _Default : Page
+        {
+            protected void Page_Load(object sender, EventArgs e)
+            {
+                // Optionally load a default document on first visit
+                if (!IsPostBack)
+                {
+                    string sampleFilePath = Server.MapPath("~/doc.docx");
+                    if (File.Exists(sampleFilePath))
+                    {
+                        byte[] fileBytes = File.ReadAllBytes(sampleFilePath);
+                        docEditor.SetDocumentFromBytes(fileBytes, "doc.docx");
+                    }
+                }
+            }
+
+            protected void btnUpload_Click(object sender, EventArgs e)
+            {
+                if (!fuFile.HasFile)
+                {
+                    litStatus.Text = "<span class='text-warning'>Please select a file.</span>";
+                    return;
+                }
+
+                // Load the uploaded document into the editor
+                docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+                litStatus.Text = "<span class='text-success'>Document loaded successfully!</span>";
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Configure the Editor Control">
+    Set the OnlyOffice server URL and JWT secret in your control:
+
+    ```csharp OnlyOfficeEditor.ascx.cs
+    public partial class OnlyOfficeEditor : UserControl
+    {
+        // URL of the OnlyOffice Document Server API
+        public string OnlyOfficeApiUrl { get; set; } = 
+            "https://your-server.com/web-apps/apps/api/documents/api.js";
+
+        // JWT secret key (must match your OnlyOffice server configuration)
+        public string JwtSecret { get; set; } = "your_secret_key";
+
+        // Public base URL for callbacks
+        public string PublicBaseUrl { get; set; } = "https://your-app.com";
+
+        // Editor mode: "edit" or "view"
+        public string Mode { get; set; } = "edit";
+
+        // Editor language
+        public string Lang { get; set; } = "en";
+    }
+    ```
+  </Step>
+</Steps>
+
+## Key Methods
+
+### SetDocumentFromBytes
+
+Loads a document into the editor from a byte array:
+
+```csharp
+docEditor.SetDocumentFromBytes(byte[] data, string fileName)
+```
+
+**Parameters:**
+- `data` - The document content as a byte array
+- `fileName` - The original filename (used to determine document type)
+
+**Example:**
+```csharp
+byte[] fileBytes = File.ReadAllBytes("document.docx");
+docEditor.SetDocumentFromBytes(fileBytes, "document.docx");
+```
+
+### SetDocumentFromFile
+
+Loads a document from a file path on the server:
+
+```csharp
+docEditor.SetDocumentFromFile(string serverFilePath, string displayName = null)
+```
+
+**Example:**
+```csharp
+string path = Server.MapPath("~/Documents/sample.docx");
+docEditor.SetDocumentFromFile(path, "Sample Document");
+```
+
+## Supported File Formats
+
+<CardGroup cols={3}>
+  <Card title="Word Documents" icon="file-word">
+    - .docx
+    - .doc
+    - .odt
+    - .rtf
+    - .txt
+  </Card>
+  
+  <Card title="Spreadsheets" icon="file-excel">
+    - .xlsx
+    - .xls
+    - .ods
+    - .csv
+  </Card>
+  
+  <Card title="Presentations" icon="file-powerpoint">
+    - .pptx
+    - .ppt
+    - .odp
+  </Card>
+</CardGroup>
+
+## Styling
+
+The example uses the included WebEditor.css stylesheet for a modern, professional appearance:
+
+```css
+:root {
+    --we-bg: #f4f6f8;
+    --we-surface: #ffffff;
+    --we-accent: #7c9383;
+    --we-border: #e2e8f0;
+}
+
+.we {
+    background: var(--we-bg);
+    border: 1px solid var(--we-border);
+    border-radius: 16px;
+    padding: 16px;
+}
+```
+
+<Note>
+  The CSS is responsive and adapts to mobile devices automatically.
+</Note>
+
+## Error Handling
+
+```csharp
+protected void btnUpload_Click(object sender, EventArgs e)
+{
+    try
+    {
+        if (!fuFile.HasFile)
+        {
+            litStatus.Text = "<span class='text-warning'>Please select a file.</span>";
+            return;
+        }
+
+        // Validate file size (example: 10MB limit)
+        if (fuFile.FileBytes.Length > 10 * 1024 * 1024)
+        {
+            litStatus.Text = "<span class='text-danger'>File too large. Maximum 10MB.</span>";
+            return;
+        }
+
+        docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+        litStatus.Text = "<span class='text-success'>Document loaded!</span>";
+    }
+    catch (Exception ex)
+    {
+        litStatus.Text = $"<span class='text-danger'>Error: {ex.Message}</span>";
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="View Mode" icon="eye" href="/examples/view-mode">
+    Learn how to display documents in read-only mode
+  </Card>
+  
+  <Card title="PDF Export" icon="file-pdf" href="/examples/pdf-export">
+    Export edited documents to PDF format
+  </Card>
+  
+  <Card title="Custom Styling" icon="palette" href="/examples/custom-styling">
+    Customize the editor appearance
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/api/user-control/overview">
+    View complete API documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,528 @@
+---
+title: "Proxy Action"
+description: "Proxy external document requests with CORS handling and security validation"
+---
+
+## Overview
+
+The `proxy` action forwards HTTP requests to external URLs and streams the response back to the client. This is useful for handling CORS restrictions and providing a controlled gateway for accessing external resources from the OnlyOffice Document Server.
+
+## Endpoint
+
+```
+GET OnlyOfficeHandler.ashx?action=proxy&url={url}
+```
+
+## Query Parameters
+
+<ParamField query="action" type="string" required>
+  Must be set to `proxy` to invoke this action
+</ParamField>
+
+<ParamField query="url" type="string" required>
+  The absolute URL to proxy. Must be a valid HTTP or HTTPS URL.
+</ParamField>
+
+## Request Example
+
+```http
+GET /OnlyOfficeHandler.ashx?action=proxy&url=https://example.com/document.docx HTTP/1.1
+Host: your-app.com
+```
+
+## Response
+
+### Success Response (200 OK)
+
+When the proxied request succeeds, the handler streams the response:
+
+<ResponseField name="statusCode" type="number" default="200">
+  HTTP status code from the proxied server
+</ResponseField>
+
+<ResponseField name="Content-Type" type="string">
+  MIME type from the proxied server, or `application/octet-stream` if not specified
+</ResponseField>
+
+<ResponseField name="Content-Disposition" type="string">
+  Content-Disposition header from the proxied server, if present
+</ResponseField>
+
+<ResponseField name="body" type="binary">
+  Raw response body from the proxied server, streamed directly to the client
+</ResponseField>
+
+#### Example Success Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+Content-Disposition: attachment; filename=document.docx
+
+[Binary file contents]
+```
+
+### Error Responses
+
+#### 400 Bad Request - Invalid URL
+
+When the URL parameter is missing, empty, or not a valid absolute URL:
+
+<ResponseField name="statusCode" type="number" default="400">
+  HTTP status code indicating bad request
+</ResponseField>
+
+<ResponseField name="body" type="string" default="Invalid URL">
+  Error message in plain text format
+</ResponseField>
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: text/plain
+
+Invalid URL
+```
+
+#### 400 Bad Request - Unsupported URL Scheme
+
+When the URL uses a scheme other than HTTP or HTTPS:
+
+<ResponseField name="statusCode" type="number" default="400">
+  HTTP status code indicating bad request
+</ResponseField>
+
+<ResponseField name="body" type="string" default="Unsupported URL scheme">
+  Error message in plain text format
+</ResponseField>
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: text/plain
+
+Unsupported URL scheme
+```
+
+## URL Validation
+
+The proxy action implements strict URL validation:
+
+### Step 1: Empty Check
+
+Verifies the URL parameter is not null or whitespace:
+
+```csharp
+if (string.IsNullOrWhiteSpace(url))
+{
+    context.Response.StatusCode = 400;
+    context.Response.Write("Invalid URL");
+    return;
+}
+```
+
+### Step 2: Valid URI Format
+
+Ensures the URL can be parsed as an absolute URI:
+
+```csharp
+if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+{
+    context.Response.StatusCode = 400;
+    context.Response.Write("Invalid URL");
+    return;
+}
+```
+
+### Step 3: Allowed Schemes
+
+Restricts URLs to HTTP and HTTPS protocols only:
+
+```csharp
+if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+{
+    context.Response.StatusCode = 400;
+    context.Response.Write("Unsupported URL scheme");
+    return;
+}
+```
+
+This prevents potential security issues from schemes like:
+- `file://` - Local file system access
+- `ftp://` - FTP protocol
+- `javascript:` - JavaScript execution
+- `data:` - Data URIs
+
+## Response Streaming
+
+The proxy action streams the response directly from the external server to the client:
+
+### Content Type Handling
+
+```csharp
+context.Response.ContentType = string.IsNullOrWhiteSpace(resp.ContentType)
+    ? "application/octet-stream"
+    : resp.ContentType;
+```
+
+- Uses the Content-Type from the proxied server
+- Falls back to `application/octet-stream` if not specified
+
+### Content Disposition Forwarding
+
+```csharp
+var contentDisposition = resp.Headers["Content-Disposition"];
+if (!string.IsNullOrWhiteSpace(contentDisposition))
+    context.Response.AddHeader("Content-Disposition", contentDisposition);
+```
+
+- Preserves the Content-Disposition header from the proxied server
+- Allows download filename to be maintained
+
+### Stream Copying
+
+```csharp
+stream.CopyTo(context.Response.OutputStream);
+context.Response.Flush();
+```
+
+- Streams data directly without buffering entire response in memory
+- Efficient for large files
+
+## CORS Handling
+
+The proxy action effectively bypasses CORS (Cross-Origin Resource Sharing) restrictions:
+
+### How It Works
+
+1. **Client Request**: Browser makes same-origin request to OnlyOfficeHandler.ashx
+2. **Server-Side Request**: Handler makes server-side request to external URL
+3. **Response**: Handler returns response to browser as same-origin
+
+### Example Scenario
+
+```
+Browser (https://your-app.com)
+    |
+    | GET OnlyOfficeHandler.ashx?action=proxy&url=https://external.com/doc.pdf
+    |
+    v
+OnlyOfficeHandler
+    |
+    | GET https://external.com/doc.pdf (server-side, no CORS)
+    |
+    v
+External Server
+    |
+    | Response with document
+    |
+    v
+OnlyOfficeHandler
+    |
+    | Streams response
+    |
+    v
+Browser (same-origin, no CORS restriction)
+```
+
+## Security Configuration
+
+### Certificate Validation
+
+<Warning>
+  The proxy action disables SSL certificate validation. This is a significant security risk and should be addressed in production environments.
+</Warning>
+
+```csharp
+ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+```
+
+This setting:
+- Accepts all SSL certificates, including self-signed and expired certificates
+- Should be removed or made conditional for production use
+
+#### Recommended Fix
+
+```csharp
+// Remove the line that disables certificate validation
+// ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+
+// Or make it conditional for development only
+#if DEBUG
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+#endif
+```
+
+### TLS Protocol Configuration
+
+The handler configures secure TLS protocols:
+
+```csharp
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                       SecurityProtocolType.Tls11 | 
+                                       SecurityProtocolType.Tls;
+```
+
+- Enables TLS 1.0, 1.1, and 1.2
+- Consider removing TLS 1.0 and 1.1 support (deprecated)
+
+#### Recommended Update
+
+```csharp
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
+```
+
+## Implementation Details
+
+### Source Code Reference
+
+The proxy action is implemented in:
+
+```
+Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx.cs:111-149
+```
+
+### Code Example
+
+```csharp
+private static void Proxy(HttpContext context)
+{
+    var url = context.Request["url"];
+    if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+    {
+        context.Response.StatusCode = 400;
+        context.Response.Write("Invalid URL");
+        return;
+    }
+
+    if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+    {
+        context.Response.StatusCode = 400;
+        context.Response.Write("Unsupported URL scheme");
+        return;
+    }
+
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                           SecurityProtocolType.Tls11 | 
+                                           SecurityProtocolType.Tls;
+
+    var req = (HttpWebRequest)WebRequest.Create(uri);
+    req.Method = "GET";
+
+    using (var resp = (HttpWebResponse)req.GetResponse())
+    using (var stream = resp.GetResponseStream())
+    {
+        context.Response.Clear();
+        context.Response.ContentType = string.IsNullOrWhiteSpace(resp.ContentType)
+            ? "application/octet-stream"
+            : resp.ContentType;
+
+        var contentDisposition = resp.Headers["Content-Disposition"];
+        if (!string.IsNullOrWhiteSpace(contentDisposition))
+            context.Response.AddHeader("Content-Disposition", contentDisposition);
+
+        stream.CopyTo(context.Response.OutputStream);
+        context.Response.Flush();
+    }
+}
+```
+
+## Usage Examples
+
+### Proxying a Document URL
+
+```javascript
+// In OnlyOffice editor configuration
+var docEditor = new DocsAPI.DocEditor("placeholder", {
+    document: {
+        url: "https://your-app.com/OnlyOfficeHandler.ashx?action=proxy&url=" + 
+             encodeURIComponent("https://external-server.com/documents/file.docx"),
+        fileType: "docx",
+        key: "unique-key",
+        title: "External Document.docx"
+    },
+    // ... other config
+});
+```
+
+### Proxying an Image
+
+```html
+<img src="OnlyOfficeHandler.ashx?action=proxy&url=https%3A%2F%2Fexternal.com%2Fimage.png" />
+```
+
+### Using in AJAX Request
+
+```javascript
+fetch('/OnlyOfficeHandler.ashx?action=proxy&url=' + encodeURIComponent(externalUrl))
+    .then(response => response.blob())
+    .then(blob => {
+        // Handle the downloaded content
+        const url = URL.createObjectURL(blob);
+        window.open(url);
+    });
+```
+
+## Security Considerations
+
+<Warning>
+  The proxy action can be exploited if not properly secured. Implement authentication, URL whitelisting, and rate limiting to prevent abuse.
+</Warning>
+
+### Security Risks
+
+1. **Open Proxy**: Can be used to proxy arbitrary URLs
+2. **SSRF (Server-Side Request Forgery)**: Can access internal network resources
+3. **Certificate Validation Bypass**: Accepts invalid SSL certificates
+4. **Resource Exhaustion**: Can be used to download large files
+5. **Privacy Leaks**: Server IP address exposed to external sites
+
+### Recommended Security Measures
+
+#### 1. Authentication
+
+```csharp
+private static void Proxy(HttpContext context)
+{
+    if (!IsUserAuthenticated(context))
+    {
+        context.Response.StatusCode = 401;
+        context.Response.Write("Unauthorized");
+        return;
+    }
+    
+    // Continue with proxy logic...
+}
+```
+
+#### 2. URL Whitelist
+
+```csharp
+private static readonly string[] AllowedHosts = new[]
+{
+    "your-documentserver.com",
+    "trusted-cdn.com",
+    "external-api.com"
+};
+
+private static void Proxy(HttpContext context)
+{
+    var url = context.Request["url"];
+    if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+    {
+        context.Response.StatusCode = 400;
+        context.Response.Write("Invalid URL");
+        return;
+    }
+    
+    if (!AllowedHosts.Contains(uri.Host))
+    {
+        context.Response.StatusCode = 403;
+        context.Response.Write("Host not allowed");
+        return;
+    }
+    
+    // Continue with proxy logic...
+}
+```
+
+#### 3. Internal Network Protection
+
+```csharp
+private static bool IsInternalIp(string host)
+{
+    try
+    {
+        var addresses = Dns.GetHostAddresses(host);
+        foreach (var addr in addresses)
+        {
+            var bytes = addr.GetAddressBytes();
+            // Check for private IP ranges
+            if (bytes[0] == 10 || 
+                (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                (bytes[0] == 192 && bytes[1] == 168) ||
+                bytes[0] == 127)
+            {
+                return true;
+            }
+        }
+    }
+    catch { }
+    return false;
+}
+
+private static void Proxy(HttpContext context)
+{
+    if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+    {
+        // ... validation
+    }
+    
+    if (IsInternalIp(uri.Host))
+    {
+        context.Response.StatusCode = 403;
+        context.Response.Write("Internal IP addresses not allowed");
+        return;
+    }
+    
+    // Continue with proxy logic...
+}
+```
+
+#### 4. Rate Limiting
+
+```csharp
+private static Dictionary<string, DateTime> _rateLimitCache = new Dictionary<string, DateTime>();
+
+private static void Proxy(HttpContext context)
+{
+    var clientIp = context.Request.UserHostAddress;
+    
+    if (_rateLimitCache.ContainsKey(clientIp))
+    {
+        var lastRequest = _rateLimitCache[clientIp];
+        if (DateTime.Now - lastRequest < TimeSpan.FromSeconds(1))
+        {
+            context.Response.StatusCode = 429;
+            context.Response.Write("Rate limit exceeded");
+            return;
+        }
+    }
+    
+    _rateLimitCache[clientIp] = DateTime.Now;
+    
+    // Continue with proxy logic...
+}
+```
+
+#### 5. Content-Length Limits
+
+```csharp
+private static void Proxy(HttpContext context)
+{
+    // ... validation code
+    
+    using (var resp = (HttpWebResponse)req.GetResponse())
+    {
+        // Check content length before streaming
+        if (resp.ContentLength > 100 * 1024 * 1024) // 100 MB limit
+        {
+            context.Response.StatusCode = 413;
+            context.Response.Write("File too large");
+            return;
+        }
+        
+        // Continue with streaming...
+    }
+}
+```
+
+## Related Actions
+
+<CardGroup cols={2}>
+  <Card title="Download Action" icon="download" href="/api/handlers/download">
+    Download documents from server storage
+  </Card>
+  <Card title="Callback Action" icon="arrow-rotate-left" href="/api/handlers/callback">
+    Handle document updates from OnlyOffice Document Server
+  </Card>
+</CardGroup>

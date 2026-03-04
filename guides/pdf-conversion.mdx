@@ -1,0 +1,520 @@
+---
+title: 'PDF Conversion'
+description: 'Convert documents to PDF format using OnlyOffice conversion service with retry mechanism and error handling'
+---
+
+## Overview
+
+The OnlyOffice Control provides robust PDF conversion capabilities through the OnlyOffice Document Server conversion service. This guide covers converting both original and edited documents to PDF format.
+
+## Conversion Methods
+
+There are two primary conversion methods depending on whether you want to convert the original document or the edited version.
+
+### ConvertCurrentDocumentToPdfBytes
+
+Converts the current document (original or edited) to PDF and returns the byte array.
+
+```csharp
+public byte[] ConvertCurrentDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+**Implementation** (`OnlyOfficeEditor.ascx.cs:209-213`):
+
+```csharp
+var pdfUrl = ConvertCurrentDocumentToPdfUrl(maxAttempts, delayMs);
+return DownloadBytesFromUrl(pdfUrl);
+```
+
+**Example Usage:**
+
+```csharp
+protected void btnDownloadPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+        
+        if (pdfBytes == null || pdfBytes.Length == 0)
+        {
+            litStatus.Text = "Conversion failed";
+            return;
+        }
+        
+        Response.Clear();
+        Response.ContentType = "application/pdf";
+        Response.AddHeader("Content-Disposition", "attachment; filename=document.pdf");
+        Response.AddHeader("Content-Length", pdfBytes.Length.ToString());
+        Response.BinaryWrite(pdfBytes);
+        Response.End();
+    }
+    catch (Exception ex)
+    {
+        litStatus.Text = "Error: " + ex.Message;
+    }
+}
+```
+
+### ConvertEditedDocumentToPdfBytes
+
+Converts the edited document (captured from the editor) to PDF format.
+
+```csharp
+public byte[] ConvertEditedDocumentToPdfBytes(int maxAttempts = 15, int delayMs = 1000)
+```
+
+**Implementation** (`OnlyOfficeEditor.ascx.cs:157-161`):
+
+```csharp
+var pdfUrl = ConvertEditedDocumentToPdfUrl(maxAttempts, delayMs);
+return DownloadBytesFromUrl(pdfUrl);
+```
+
+<Note>
+This method requires that the edited document has been captured using the capture functionality. Check `HasEditedDocument` before calling.
+</Note>
+
+**Example from Default.aspx.cs** (`Default.aspx.cs:35-56`):
+
+```csharp
+protected void btnDescargar_Click(object sender, EventArgs e)
+{
+    byte[] documentBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+    
+    if (documentBytes == null || documentBytes.Length == 0)
+    {
+        litStatus.Text = "<span class='text-warning'>No hay documento editado para descargar.</span>";
+        return;
+    }
+    
+    docEditor.ClearEditedDocument();
+    
+    var ext = Path.GetExtension(docEditor.DocumentName ?? ".docx");
+    var fileName = docEditor.DocumentName ?? ("documento" + ext);
+    Response.Clear();
+    Response.ContentType = "application/octet-stream";
+    Response.AddHeader("Content-Disposition", "attachment; filename=" + fileName + ".pdf");
+    Response.AddHeader("Content-Length", documentBytes.Length.ToString());
+    Response.BinaryWrite(documentBytes);
+    Response.End();
+}
+```
+
+## Conversion Service Integration
+
+### Service URL Resolution
+
+The conversion service URL is derived from the OnlyOffice API URL (`OnlyOfficeEditor.ascx.cs:298-305`):
+
+```csharp
+private string ResolveConvertServiceUrl()
+{
+    if (string.IsNullOrWhiteSpace(OnlyOfficeApiUrl) || 
+        !Uri.TryCreate(OnlyOfficeApiUrl, UriKind.Absolute, out var apiUri))
+        throw new InvalidOperationException("OnlyOfficeApiUrl no está configurada correctamente.");
+    
+    var root = apiUri.GetLeftPart(UriPartial.Authority);
+    return root.TrimEnd('/') + "/ConvertService.ashx";
+}
+```
+
+**Example:**
+- API URL: `https://docserver.com/web-apps/apps/api/documents/api.js`
+- Conversion URL: `https://docserver.com/ConvertService.ashx`
+
+### Conversion Request Payload
+
+The conversion request is built with the following structure (`OnlyOfficeEditor.ascx.cs:179-193`):
+
+```csharp
+var requestPayload = new Dictionary<string, object>
+{
+    ["async"] = false,
+    ["filetype"] = sourceExt,        // e.g., "docx"
+    ["outputtype"] = "pdf",
+    ["url"] = sourceUrl,             // Document download URL
+    ["title"] = Path.GetFileName(sourceName),
+    ["key"] = sourceKey              // Document key
+};
+
+var payloadJson = serializer.Serialize(requestPayload);
+var token = OnlyOfficeJwt.Create(payloadJson, JwtSecret);
+
+requestPayload["token"] = token;
+var body = serializer.Serialize(requestPayload);
+```
+
+<Warning>
+The conversion service requires a valid JWT token. Ensure your `JwtSecret` matches the OnlyOffice server configuration.
+</Warning>
+
+## Retry Mechanism
+
+The conversion process includes a robust retry mechanism to handle asynchronous conversion operations.
+
+### How It Works
+
+The retry logic is implemented in `ConvertDocumentSourceToPdfUrl` (`OnlyOfficeEditor.ascx.cs:163-207`):
+
+<Steps>
+
+### Validate Parameters
+
+```csharp
+if (string.IsNullOrWhiteSpace(sourceUrl) || !Uri.TryCreate(sourceUrl, UriKind.Absolute, out _))
+    throw new InvalidOperationException("La URL del documento no es válida para la conversión.");
+
+var sourceExt = Path.GetExtension(sourceName)?.TrimStart('.').ToLowerInvariant();
+if (string.IsNullOrWhiteSpace(sourceExt))
+    throw new InvalidOperationException("No fue posible determinar el tipo del documento.");
+```
+
+### Initialize Retry Loop
+
+```csharp
+var attempts = Math.Max(1, maxAttempts);
+var wait = Math.Max(0, delayMs);
+
+for (var i = 0; i < attempts; i++)
+{
+    // Conversion attempt
+}
+```
+
+### Make Conversion Request
+
+```csharp
+var result = CallConvertService(convertServiceUrl, body, token);
+if (result.EndConvert && !string.IsNullOrWhiteSpace(result.FileUrl))
+    return result.FileUrl;
+```
+
+### Handle Errors
+
+```csharp
+if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+    throw new InvalidOperationException(result.ErrorMessage);
+```
+
+### Delay Between Attempts
+
+```csharp
+if (i < attempts - 1 && wait > 0)
+    Thread.Sleep(wait);
+```
+
+### Timeout
+
+```csharp
+throw new TimeoutException("La conversión a PDF no terminó dentro del tiempo esperado.");
+```
+
+</Steps>
+
+### Customizing Retry Behavior
+
+```csharp
+// Quick conversion (5 attempts, 500ms delay)
+byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+    maxAttempts: 5, 
+    delayMs: 500
+);
+
+// Extended conversion (30 attempts, 2 second delay)
+byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+    maxAttempts: 30, 
+    delayMs: 2000
+);
+```
+
+<Tip>
+For large documents or slow networks, increase both `maxAttempts` and `delayMs` to allow more time for conversion.
+</Tip>
+
+## Conversion Service Communication
+
+The control makes HTTP requests to the conversion service with proper authentication (`OnlyOfficeEditor.ascx.cs:307-349`):
+
+```csharp
+private static ConvertServiceResult CallConvertService(
+    string convertServiceUrl, 
+    string body, 
+    string token)
+{
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                           SecurityProtocolType.Tls11 | 
+                                           SecurityProtocolType.Tls;
+    
+    var req = (HttpWebRequest)WebRequest.Create(convertServiceUrl);
+    req.Method = "POST";
+    req.ContentType = "application/json";
+    req.Accept = "application/json";
+    req.Headers["Authorization"] = "Bearer " + token;
+    
+    var bytes = Encoding.UTF8.GetBytes(body);
+    using (var reqStream = req.GetRequestStream())
+    {
+        reqStream.Write(bytes, 0, bytes.Length);
+    }
+    
+    try
+    {
+        using (var resp = (HttpWebResponse)req.GetResponse())
+        using (var stream = resp.GetResponseStream())
+        using (var reader = new StreamReader(stream, Encoding.UTF8))
+        {
+            var json = reader.ReadToEnd();
+            return ParseConvertServiceResult(json);
+        }
+    }
+    catch (WebException ex)
+    {
+        var message = "Error al invocar ConvertService.ashx";
+        if (ex.Response != null)
+        {
+            using (var stream = ex.Response.GetResponseStream())
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                var responseBody = reader.ReadToEnd();
+                if (!string.IsNullOrWhiteSpace(responseBody))
+                    message += ": " + responseBody;
+            }
+        }
+        return new ConvertServiceResult { ErrorMessage = message };
+    }
+}
+```
+
+## Response Parsing
+
+The conversion service response is parsed to extract results (`OnlyOfficeEditor.ascx.cs:351-388`):
+
+```csharp
+private static ConvertServiceResult ParseConvertServiceResult(string json)
+{
+    var result = new ConvertServiceResult();
+    if (string.IsNullOrWhiteSpace(json))
+    {
+        result.ErrorMessage = "La respuesta del servicio de conversión llegó vacía.";
+        return result;
+    }
+    
+    var serializer = new JavaScriptSerializer();
+    var payload = serializer.Deserialize<Dictionary<string, object>>(json) ?? 
+                  new Dictionary<string, object>();
+    
+    if (payload.TryGetValue("fileUrl", out var fileUrlObj))
+        result.FileUrl = fileUrlObj as string;
+    
+    if (payload.TryGetValue("endConvert", out var endConvertObj))
+    {
+        try { result.EndConvert = Convert.ToBoolean(endConvertObj); }
+        catch { result.EndConvert = false; }
+    }
+    
+    if (payload.TryGetValue("error", out var errorObj) && errorObj != null)
+    {
+        var errorRaw = Convert.ToString(errorObj);
+        if (!string.IsNullOrWhiteSpace(errorRaw) && errorRaw != "0")
+            result.ErrorMessage = "ConvertService devolvió error=" + errorRaw + ".";
+    }
+    
+    return result;
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endConvert` | boolean | True when conversion is complete |
+| `fileUrl` | string | URL to download the converted PDF |
+| `error` | int | Error code (0 = success) |
+| `percent` | int | Conversion progress percentage |
+
+## Downloading Converted PDF
+
+Once conversion is complete, the PDF is downloaded from the provided URL (`OnlyOfficeEditor.ascx.cs:215-230`):
+
+```csharp
+private byte[] DownloadBytesFromUrl(string url)
+{
+    ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | 
+                                           SecurityProtocolType.Tls11 | 
+                                           SecurityProtocolType.Tls;
+    
+    var req = (HttpWebRequest)WebRequest.Create(url);
+    req.Method = "GET";
+    
+    using (var resp = (HttpWebResponse)req.GetResponse())
+    using (var stream = resp.GetResponseStream())
+    using (var ms = new MemoryStream())
+    {
+        stream.CopyTo(ms);
+        return ms.ToArray();
+    }
+}
+```
+
+## Temporary Document Handling
+
+For edited documents, a temporary document source is created (`OnlyOfficeEditor.ascx.cs:232-251`):
+
+```csharp
+private TemporaryDocumentSource CreateTemporaryDocumentSource(
+    byte[] data, 
+    string baseFileName)
+{
+    var ext = Path.GetExtension(baseFileName);
+    if (string.IsNullOrWhiteSpace(ext))
+        ext = ".docx";
+    
+    var tempFileId = Guid.NewGuid().ToString("N");
+    var uploadsDir = HttpContext.Current.Server.MapPath("~/App_Data/uploads");
+    Directory.CreateDirectory(uploadsDir);
+    
+    var physicalPath = Path.Combine(uploadsDir, tempFileId + ext);
+    File.WriteAllBytes(physicalPath, data);
+    
+    return new TemporaryDocumentSource
+    {
+        Name = Path.GetFileNameWithoutExtension(baseFileName) + "_edited" + ext,
+        Key = GenerateDocumentKey(tempFileId),
+        Url = BuildAbsoluteUrl(
+            "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=" + 
+            HttpUtility.UrlEncode(tempFileId))
+    };
+}
+```
+
+<Note>
+Temporary files created during conversion should be cleaned up periodically to prevent disk space issues.
+</Note>
+
+## Error Handling
+
+### Common Conversion Errors
+
+<Accordion title="Document Not Loaded">
+```csharp
+if (!HasDocument)
+    throw new InvalidOperationException("No hay un documento cargado para convertir.");
+```
+Ensure a document is loaded before attempting conversion.
+</Accordion>
+
+<Accordion title="No Edited Document">
+```csharp
+var editedBytes = GetEditedDocumentBytes();
+if (editedBytes == null || editedBytes.Length == 0)
+    throw new InvalidOperationException(
+        "No se encontró un documento editado capturado para convertir.");
+```
+Capture the edited document before converting.
+</Accordion>
+
+<Accordion title="Invalid Document URL">
+```csharp
+if (string.IsNullOrWhiteSpace(sourceUrl) || 
+    !Uri.TryCreate(sourceUrl, UriKind.Absolute, out _))
+    throw new InvalidOperationException(
+        "La URL del documento no es válida para la conversión.");
+```
+Verify that document URLs are properly configured.
+</Accordion>
+
+<Accordion title="Conversion Timeout">
+```csharp
+throw new TimeoutException(
+    "La conversión a PDF no terminó dentro del tiempo esperado.");
+```
+Increase `maxAttempts` or check OnlyOffice server status.
+</Accordion>
+
+## Complete Conversion Example
+
+```csharp
+using System;
+using System.IO;
+using System.Web.UI;
+
+namespace YourApp
+{
+    public partial class DocumentConverter : Page
+    {
+        protected void btnConvertToPdf_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Check if document is loaded
+                if (!docEditor.HasDocument)
+                {
+                    ShowMessage("Please load a document first", "warning");
+                    return;
+                }
+                
+                // Show progress
+                ShowMessage("Converting to PDF...", "info");
+                
+                // Convert with extended retry
+                byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes(
+                    maxAttempts: 20,
+                    delayMs: 1500
+                );
+                
+                if (pdfBytes == null || pdfBytes.Length == 0)
+                {
+                    ShowMessage("Conversion failed - no data returned", "error");
+                    return;
+                }
+                
+                // Generate filename
+                var originalName = Path.GetFileNameWithoutExtension(
+                    docEditor.DocumentName ?? "document");
+                var pdfFileName = originalName + ".pdf";
+                
+                // Send to client
+                Response.Clear();
+                Response.ContentType = "application/pdf";
+                Response.AddHeader("Content-Disposition", 
+                    "attachment; filename=" + pdfFileName);
+                Response.AddHeader("Content-Length", pdfBytes.Length.ToString());
+                Response.BinaryWrite(pdfBytes);
+                Response.Flush();
+                Response.End();
+            }
+            catch (TimeoutException tex)
+            {
+                ShowMessage("Conversion timeout: " + tex.Message, "error");
+            }
+            catch (InvalidOperationException iox)
+            {
+                ShowMessage("Conversion error: " + iox.Message, "error");
+            }
+            catch (Exception ex)
+            {
+                ShowMessage("Unexpected error: " + ex.Message, "error");
+                // Log exception
+            }
+        }
+        
+        private void ShowMessage(string message, string type)
+        {
+            litStatus.Text = $"<div class='alert alert-{type}'>{message}</div>";
+        }
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Advanced Configuration" icon="gear" href="/guides/advanced-configuration">
+    Configure JWT tokens and callback handling
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solve conversion errors and timeout issues
+  </Card>
+</CardGroup>

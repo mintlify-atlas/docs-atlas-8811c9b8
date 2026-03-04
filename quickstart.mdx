@@ -1,80 +1,481 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get started quickly with the OnlyOffice Control - from registration to loading and saving documents
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating a basic page that allows users to upload, edit, and download documents using the OnlyOffice Control.
 
-### Step 1: Set up your local environment
+## Basic Implementation
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Steps>
+  <Step title="Register the Control">
+    First, register the OnlyOffice Control on your ASPX page:
 
-### Step 2: Deploy your changes
+    ```asp Default.aspx
+    <%@ Page Language="C#" 
+             AutoEventWireup="true" 
+             CodeBehind="Default.aspx.cs" 
+             Inherits="YourNamespace._Default" 
+             ValidateRequest="false" %>
+    <%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+                 TagPrefix="oo" 
+                 TagName="Editor" %>
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Note>
+    Set `ValidateRequest="false"` on pages using the OnlyOffice Control to prevent request validation issues with document content.
+    </Note>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Add Control to Page">
+    Add the editor control to your page markup:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```asp Default.aspx
+    <!DOCTYPE html>
+    <html>
+    <head runat="server">
+        <title>Document Editor</title>
+        <style>
+            iframe {
+                height: 700px;
+            }
+        </style>
+    </head>
+    <body>
+        <form id="form1" runat="server">
+            <div>
+                <h1>OnlyOffice Document Editor</h1>
+                
+                <!-- File Upload Section -->
+                <div>
+                    <asp:FileUpload ID="fuFile" runat="server" />
+                    <asp:Button ID="btnUpload" 
+                                runat="server" 
+                                Text="Upload and Open" 
+                                OnClick="btnUpload_Click" />
+                    <asp:Literal ID="litStatus" runat="server" />
+                </div>
+                
+                <!-- OnlyOffice Editor -->
+                <oo:Editor ID="docEditor" 
+                           runat="server" 
+                           CaptureTriggerId="btnDownload" />
+                
+                <!-- Download Button -->
+                <div>
+                    <asp:Button ID="btnDownload" 
+                                runat="server" 
+                                Text="Download Document" 
+                                OnClick="btnDownload_Click" />
+                </div>
+            </div>
+        </form>
+    </body>
+    </html>
+    ```
 
-### Step 3: Go live
+    <Accordion title="Understanding CaptureTriggerId">
+      The `CaptureTriggerId` property specifies which button(s) should trigger document capture from the editor. When clicked, the control automatically:
+      1. Requests the current document from the OnlyOffice editor
+      2. Stores it as base64 in a hidden field
+      3. Triggers a postback
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+      You can specify multiple buttons separated by commas: `CaptureTriggerId="btnSave,btnDownload,btnConvert"`
+    </Accordion>
+  </Step>
 
-## Next steps
+  <Step title="Implement Upload Handler">
+    In your code-behind file, implement the upload functionality:
 
-Now that you have your docs running, explore these key features:
+    ```csharp Default.aspx.cs
+    using System;
+    using System.IO;
+    using System.Web.UI;
 
-<CardGroup cols={2}>
+    namespace YourNamespace
+    {
+        public partial class _Default : Page
+        {
+            protected void Page_Load(object sender, EventArgs e)
+            {
+                if (!IsPostBack)
+                {
+                    // Optional: Load a default document
+                    string sampleFilePath = Server.MapPath("~/Documents/sample.docx");
+                    if (File.Exists(sampleFilePath))
+                    {
+                        docEditor.SetDocumentFromFile(sampleFilePath, "sample.docx");
+                    }
+                }
+            }
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+            protected void btnUpload_Click(object sender, EventArgs e)
+            {
+                if (!fuFile.HasFile)
+                {
+                    litStatus.Text = "<span style='color:red;'>Please select a file</span>";
+                    return;
+                }
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+                // Load the uploaded file into the editor
+                docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+                
+                // Set editor mode (optional)
+                docEditor.Mode = "edit"; // or "view" for read-only
+                
+                litStatus.Text = "<span style='color:green;'>Document loaded successfully</span>";
+            }
+        }
+    }
+    ```
+  </Step>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+  <Step title="Implement Download Handler">
+    Add functionality to download the edited document:
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+    ```csharp Default.aspx.cs
+    protected void btnDownload_Click(object sender, EventArgs e)
+    {
+        // Get the edited document bytes
+        byte[] documentBytes = docEditor.GetEditedDocumentBytes();
 
-</CardGroup>
+        if (documentBytes == null || documentBytes.Length == 0)
+        {
+            litStatus.Text = "<span style='color:red;'>No edited document available</span>";
+            return;
+        }
+
+        // Clear the cached document
+        docEditor.ClearEditedDocument();
+
+        // Prepare file for download
+        var fileName = docEditor.DocumentName ?? "document.docx";
+        
+        Response.Clear();
+        Response.ContentType = "application/octet-stream";
+        Response.AddHeader("Content-Disposition", "attachment; filename=" + fileName);
+        Response.AddHeader("Content-Length", documentBytes.Length.ToString());
+        Response.BinaryWrite(documentBytes);
+        Response.End();
+    }
+    ```
+
+    <Note>
+    The `CaptureTriggerId` property automatically captures the document when the download button is clicked, so you don't need to manually call capture methods.
+    </Note>
+  </Step>
+</Steps>
+
+## Configuring Editor Properties
+
+You can configure various properties of the OnlyOffice editor:
+
+### Basic Configuration
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    if (!IsPostBack)
+    {
+        // Configure editor properties
+        docEditor.Mode = "edit";              // "edit" or "view"
+        docEditor.Lang = "en";                 // Language: "en", "es", "fr", etc.
+        docEditor.EditorHeight = "600px";     // Editor height
+        docEditor.UserId = "123";              // Current user ID
+        docEditor.UserDisplayName = "John Doe"; // Current user name
+        
+        // Load a document
+        LoadDocument();
+    }
+}
+```
+
+### Loading Documents
+
+There are three ways to load documents into the editor:
+
+<CodeGroup>
+
+```csharp From Bytes
+// Load from byte array (e.g., from upload)
+byte[] fileBytes = fuFile.FileBytes;
+string fileName = fuFile.FileName;
+docEditor.SetDocumentFromBytes(fileBytes, fileName);
+```
+
+```csharp From File
+// Load from server file path
+string filePath = Server.MapPath("~/Documents/contract.docx");
+docEditor.SetDocumentFromFile(filePath, "contract.docx");
+```
+
+```csharp From Upload ID
+// Load from previously uploaded file ID
+string fileId = "abc123def456";  // Generated when file was uploaded
+string originalName = "document.docx";
+docEditor.SetDocumentFromUpload(fileId, originalName);
+```
+
+</CodeGroup>
+
+## Advanced Features
+
+### PDF Conversion
+
+Convert the current document to PDF:
+
+```csharp
+protected void btnConvertToPdf_Click(object sender, EventArgs e)
+{
+    try
+    {
+        // Convert the current document to PDF bytes
+        byte[] pdfBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+        
+        // Download the PDF
+        Response.Clear();
+        Response.ContentType = "application/pdf";
+        Response.AddHeader("Content-Disposition", 
+            "attachment; filename=" + Path.GetFileNameWithoutExtension(docEditor.DocumentName) + ".pdf");
+        Response.BinaryWrite(pdfBytes);
+        Response.End();
+    }
+    catch (Exception ex)
+    {
+        litStatus.Text = "<span style='color:red;'>Error converting to PDF: " + ex.Message + "</span>";
+    }
+}
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+PDF conversion requires the OnlyOffice Document Server conversion service to be available.
 </Note>
+
+### View-Only Mode
+
+Set the editor to read-only mode:
+
+```csharp
+protected void btnViewOnly_Click(object sender, EventArgs e)
+{
+    // Switch to view mode
+    docEditor.Mode = "view";
+    
+    // Reload the page to apply the change
+    Response.Redirect(Request.Url.ToString());
+}
+```
+
+### Checking Document Status
+
+Check if a document is loaded or edited:
+
+```csharp
+protected void Page_Load(object sender, EventArgs e)
+{
+    // Check if a document is currently loaded
+    if (docEditor.HasDocument)
+    {
+        lblDocumentName.Text = docEditor.DocumentName;
+    }
+    
+    // Check if there's an edited version
+    if (docEditor.HasEditedDocument)
+    {
+        btnDownload.Enabled = true;
+        btnDownload.Text = "Download Edited Document";
+    }
+}
+```
+
+## Complete Example
+
+Here's a complete working example:
+
+<CodeGroup>
+
+```asp Default.aspx
+<%@ Page Language="C#" 
+         AutoEventWireup="true" 
+         CodeBehind="Default.aspx.cs" 
+         Inherits="OnlyOfficeControl._Default" 
+         ValidateRequest="false" %>
+<%@ Register Src="~/Controls/OnlyOfficeEditor/OnlyOfficeEditor.ascx" 
+             TagPrefix="oo" 
+             TagName="Editor" %>
+
+<!DOCTYPE html>
+<html>
+<head runat="server">
+    <title>Document Editor</title>
+    <style>
+        iframe { height: 700px; }
+        .toolbar { padding: 20px; background: #f5f5f5; margin-bottom: 20px; }
+        .editor-container { padding: 20px; }
+    </style>
+</head>
+<body>
+    <form id="form1" runat="server">
+        <div class="toolbar">
+            <asp:FileUpload ID="fuFile" runat="server" />
+            <asp:Button ID="btnUpload" 
+                        runat="server" 
+                        Text="Upload and Open" 
+                        OnClick="btnUpload_Click" />
+            <asp:Literal ID="litStatus" runat="server" />
+        </div>
+        
+        <div class="editor-container">
+            <oo:Editor ID="docEditor" 
+                       runat="server" 
+                       CaptureTriggerId="btnDownload" />
+            
+            <div style="margin-top: 20px;">
+                <asp:Button ID="btnDownload" 
+                            runat="server" 
+                            Text="Save and Download" 
+                            OnClick="btnDownload_Click" />
+            </div>
+        </div>
+    </form>
+</body>
+</html>
+```
+
+```csharp Default.aspx.cs
+using System;
+using System.IO;
+using System.Web.UI;
+
+namespace OnlyOfficeControl
+{
+    public partial class _Default : Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            // Page initialization
+        }
+
+        protected void btnUpload_Click(object sender, EventArgs e)
+        {
+            if (!fuFile.HasFile)
+            {
+                litStatus.Text = "<span style='color:red;'>Please select a file</span>";
+                return;
+            }
+            
+            docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+            docEditor.Mode = "edit";
+            litStatus.Text = "<span style='color:green;'>Document loaded successfully</span>";
+        }
+
+        protected void btnDownload_Click(object sender, EventArgs e)
+        {
+            // Convert to PDF and download
+            byte[] documentBytes = docEditor.ConvertCurrentDocumentToPdfBytes();
+
+            if (documentBytes == null || documentBytes.Length == 0)
+            {
+                litStatus.Text = "<span style='color:red;'>No document available</span>";
+                return;
+            }
+
+            docEditor.ClearEditedDocument();
+
+            var fileName = Path.GetFileNameWithoutExtension(docEditor.DocumentName) + ".pdf";
+            Response.Clear();
+            Response.ContentType = "application/pdf";
+            Response.AddHeader("Content-Disposition", "attachment; filename=" + fileName);
+            Response.AddHeader("Content-Length", documentBytes.Length.ToString());
+            Response.BinaryWrite(documentBytes);
+            Response.End();
+        }
+    }
+}
+```
+
+</CodeGroup>
+
+## Common Patterns
+
+### Upload, Edit, and Save Workflow
+
+```csharp
+// 1. User uploads document
+protected void btnUpload_Click(object sender, EventArgs e)
+{
+    docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+    docEditor.Mode = "edit";
+}
+
+// 2. User edits in OnlyOffice
+// (happens in browser)
+
+// 3. User saves document
+protected void btnSave_Click(object sender, EventArgs e)
+{
+    byte[] editedBytes = docEditor.GetEditedDocumentBytes();
+    
+    // Save to database, file system, etc.
+    SaveToDatabase(editedBytes, docEditor.DocumentName);
+    
+    docEditor.ClearEditedDocument();
+}
+```
+
+### Load from Database
+
+```csharp
+protected void LoadDocumentFromDatabase(int documentId)
+{
+    // Retrieve document from database
+    var doc = GetDocumentFromDatabase(documentId);
+    
+    // Load into editor
+    docEditor.SetDocumentFromBytes(doc.Content, doc.FileName);
+    docEditor.Mode = "edit";
+    docEditor.UserId = CurrentUser.Id.ToString();
+    docEditor.UserDisplayName = CurrentUser.FullName;
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Editor doesn't show document">
+    Verify that:
+    - A document was loaded using one of the `SetDocument*` methods
+    - The `HasDocument` property returns `true`
+    - No JavaScript errors in the browser console
+  </Accordion>
+
+  <Accordion title="Download returns empty document">
+    Ensure:
+    - The button is listed in `CaptureTriggerId`
+    - The document was actually edited (check `HasEditedDocument`)
+    - The callback URL is reachable from OnlyOffice server
+  </Accordion>
+
+  <Accordion title="PDF conversion fails">
+    Check:
+    - OnlyOffice conversion service is running
+    - The document format is supported for conversion
+    - Network connectivity between your server and OnlyOffice
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have a basic implementation working, explore:
+
+- Customizing the editor appearance with CSS
+- Implementing user permissions and access control
+- Integrating with your document management system
+- Adding collaboration features
+- Implementing version control
+
+<Card title="API Reference" icon="code" href="/api/user-control/overview">
+  Explore the complete API documentation
+</Card>

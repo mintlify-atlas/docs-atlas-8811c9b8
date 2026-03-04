@@ -1,0 +1,158 @@
+---
+title: Introduction
+description: Learn about the OnlyOffice Control for ASP.NET Web Forms - a powerful document editor integration for web applications
+---
+
+## Overview
+
+The OnlyOffice Control is a comprehensive ASP.NET Web Forms user control that integrates OnlyOffice Document Server into your web applications. This control provides a seamless way to view, edit, and collaborate on documents directly within your ASP.NET applications.
+
+## What is OnlyOffice Control?
+
+OnlyOffice Control (`OnlyOfficeEditor`) is a reusable ASP.NET user control that wraps the OnlyOffice Document Server API, providing:
+
+- **Document Editing**: Full-featured document, spreadsheet, and presentation editing
+- **Real-time Collaboration**: Multiple users can edit documents simultaneously
+- **Format Support**: Supports Word, Excel, PowerPoint, and various other document formats
+- **PDF Conversion**: Built-in document-to-PDF conversion capabilities
+- **JWT Security**: Secure communication with OnlyOffice Document Server using JSON Web Tokens
+- **Callback Handling**: Automatic document saving and version management
+
+## Key Features
+
+### Document Management
+
+- Load documents from bytes, files, or upload streams
+- Automatic document key generation and tracking
+- Support for multiple document types (word, cell, slide)
+- Document download and save functionality
+
+### Editor Modes
+
+- **Edit Mode**: Full editing capabilities with save functionality
+- **View Mode**: Read-only document viewing
+
+### Document Conversion
+
+- Convert documents to PDF format
+- Support for edited document conversion
+- Configurable retry logic for conversion operations
+
+### Security
+
+- JWT token-based authentication
+- Configurable secret key management
+- Secure callback endpoints
+
+## Requirements
+
+<Note>
+Ensure all requirements are met before installing the OnlyOffice Control.
+</Note>
+
+### Server Requirements
+
+- **ASP.NET Web Forms**: .NET Framework 4.8 or higher
+- **IIS**: Internet Information Services 7.0 or higher
+- **OnlyOffice Document Server**: A running instance of OnlyOffice Document Server (self-hosted or cloud)
+
+### Project Requirements
+
+- ASP.NET Web Forms project targeting .NET Framework 4.8
+- Web.config configured for large file uploads (optional, but recommended)
+- Access to OnlyOffice Document Server API endpoint
+
+### Browser Requirements
+
+- Modern web browsers with JavaScript enabled
+- Support for HTML5 and iframes
+
+## Architecture Overview
+
+### Component Structure
+
+The OnlyOffice Control consists of several key components:
+
+```
+Controls/OnlyOfficeEditor/
+├── OnlyOfficeEditor.ascx          # User control markup
+├── OnlyOfficeEditor.ascx.cs       # Main control logic
+├── OnlyOfficeEditor.js            # Client-side JavaScript
+├── OnlyOfficeEditor.css           # Styling
+├── OnlyOfficeHandler.ashx         # HTTP handler for callbacks
+├── OnlyOfficeHandler.ashx.cs      # Handler implementation
+└── OnlyOfficeJwt.cs               # JWT token generation
+```
+
+### Data Flow
+
+1. **Document Loading**: Application loads document into control
+2. **Editor Initialization**: Control generates configuration with JWT token
+3. **OnlyOffice API**: JavaScript initializes OnlyOffice editor
+4. **User Editing**: User makes changes in the editor
+5. **Callback**: OnlyOffice server sends edited document to callback URL
+6. **Document Capture**: Control captures edited document as base64
+7. **Save/Download**: Application retrieves edited document bytes
+
+### Key Properties
+
+The control exposes several important properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `DocumentUrl` | string | URL where OnlyOffice can download the document |
+| `DocumentName` | string | Display name of the document |
+| `DocumentKey` | string | Unique key for document versioning |
+| `CallbackUrl` | string | URL for OnlyOffice to send edited documents |
+| `OnlyOfficeApiUrl` | string | OnlyOffice Document Server API URL |
+| `JwtSecret` | string | Secret key for JWT token generation |
+| `PublicBaseUrl` | string | Public-facing base URL for your application |
+| `Mode` | string | Editor mode: "edit" or "view" |
+| `Lang` | string | Language code (e.g., "es", "en") |
+| `EditorHeight` | string | Height of the editor (e.g., "520px") |
+| `UserId` | string | Current user identifier |
+| `UserDisplayName` | string | Current user display name |
+
+### Handler Actions
+
+The `OnlyOfficeHandler.ashx` supports three actions:
+
+- **download**: Serves documents to OnlyOffice Document Server
+- **callback**: Receives edited documents from OnlyOffice Document Server
+- **proxy**: Proxies external URLs (for embedded resources)
+
+## Document Types
+
+The control automatically detects document types based on file extensions:
+
+- **Word** (default): .doc, .docx, .odt, .txt, .pdf, etc.
+- **Cell** (spreadsheet): .xls, .xlsx, .ods, .csv
+- **Slide** (presentation): .ppt, .pptx, .odp
+
+## Use Cases
+
+### Enterprise Document Management
+
+Integrate document editing into your document management system with version control and audit trails.
+
+### Collaborative Workflows
+
+Enable multiple users to collaborate on contracts, reports, and proposals in real-time.
+
+### Form Processing
+
+Allow users to fill out and edit document templates with pre-populated data.
+
+### Document Review
+
+Provide view-only access to documents with optional conversion to PDF for archival.
+
+## Next Steps
+
+<Card title="Installation" icon="download" href="/installation">
+  Learn how to install and configure the OnlyOffice Control in your project
+</Card>
+
+<Card title="Quick Start" icon="rocket" href="/quickstart">
+  Get started quickly with a basic implementation
+</Card>

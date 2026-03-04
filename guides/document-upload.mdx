@@ -1,0 +1,328 @@
+---
+title: 'Document Upload & Storage'
+description: 'Handle file uploads, manage document storage in App_Data/uploads, and understand the different methods for loading documents'
+---
+
+## Overview
+
+The OnlyOffice Control provides flexible methods for uploading and storing documents. All uploaded files are stored in the `App_Data/uploads` directory with unique identifiers to prevent conflicts.
+
+## Upload Methods
+
+There are three main methods for loading documents into the editor, each suited for different scenarios.
+
+### SetDocumentFromBytes
+
+Load a document from a byte array. This is the most flexible method and is used internally by other methods.
+
+```csharp
+public void SetDocumentFromBytes(byte[] data, string fileName)
+```
+
+**Implementation Details** (`OnlyOfficeEditor.ascx.cs:93-111`):
+
+<Steps>
+
+### Generate Unique File ID
+
+A GUID is generated to ensure unique file storage:
+
+```csharp
+var fileId = Guid.NewGuid().ToString("N");
+```
+
+### Preserve File Extension
+
+The original file extension is extracted and preserved:
+
+```csharp
+var ext = Path.GetExtension(fileName);
+var storedName = fileId + ext;
+```
+
+### Store in App_Data/uploads
+
+The file is saved with the unique name:
+
+```csharp
+var uploadsDir = HttpContext.Current.Server.MapPath("~/App_Data/uploads");
+Directory.CreateDirectory(uploadsDir);
+File.WriteAllBytes(Path.Combine(uploadsDir, storedName), data);
+```
+
+### Generate URLs
+
+Document and callback URLs are created:
+
+```csharp
+DocumentUrl = BuildAbsoluteUrl(
+    "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=" + 
+    HttpUtility.UrlEncode(fileId));
+    
+CallbackUrl = BuildAbsoluteUrl(
+    "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=callback&fileId=" + 
+    HttpUtility.UrlEncode(fileId));
+```
+
+</Steps>
+
+**Example Usage:**
+
+```csharp
+protected void btnUpload_Click(object sender, EventArgs e)
+{
+    if (!fuFile.HasFile)
+        return;
+    
+    // Upload from FileUpload control
+    docEditor.SetDocumentFromBytes(fuFile.FileBytes, fuFile.FileName);
+    litStatus.Text = "Document uploaded successfully";
+}
+```
+
+### SetDocumentFromFile
+
+Load a document directly from a server file path. This method reads the file and calls `SetDocumentFromBytes`.
+
+```csharp
+public void SetDocumentFromFile(string serverFilePath, string displayName = null)
+```
+
+**Implementation** (`OnlyOfficeEditor.ascx.cs:113-119`):
+
+```csharp
+if (!File.Exists(serverFilePath)) return;
+SetDocumentFromBytes(
+    File.ReadAllBytes(serverFilePath),
+    displayName ?? Path.GetFileName(serverFilePath));
+```
+
+**Example Usage:**
+
+```csharp
+protected void LoadTemplate_Click(object sender, EventArgs e)
+{
+    string templatePath = Server.MapPath("~/Templates/contract-template.docx");
+    docEditor.SetDocumentFromFile(templatePath, "Contract Template");
+}
+```
+
+<Tip>
+Use the optional `displayName` parameter to show a user-friendly name in the editor while storing the file with a different name.
+</Tip>
+
+### SetDocumentFromUpload
+
+Load a document that has already been uploaded and stored. This method is useful when you manage file uploads separately.
+
+```csharp
+public void SetDocumentFromUpload(string fileId, string originalName)
+```
+
+**Implementation** (`OnlyOfficeEditor.ascx.cs:121-131`):
+
+```csharp
+if (string.IsNullOrWhiteSpace(fileId)) return;
+
+DocumentName = originalName ?? fileId;
+DocumentKey = GenerateDocumentKey(fileId);
+DocumentUrl = BuildAbsoluteUrl(
+    "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=download&fileId=" + 
+    HttpUtility.UrlEncode(fileId));
+CallbackUrl = BuildAbsoluteUrl(
+    "~/Controls/OnlyOfficeEditor/OnlyOfficeHandler.ashx?action=callback&fileId=" + 
+    HttpUtility.UrlEncode(fileId));
+```
+
+**Example Usage:**
+
+```csharp
+// Load previously uploaded document
+string existingFileId = Session["CurrentDocumentId"] as string;
+if (!string.IsNullOrEmpty(existingFileId))
+{
+    docEditor.SetDocumentFromUpload(existingFileId, "Previously Uploaded Document");
+}
+```
+
+## File Storage Structure
+
+### Storage Directory
+
+All files are stored in:
+
+```
+YourApp/
+└── App_Data/
+    └── uploads/
+        ├── a1b2c3d4e5f6.docx
+        ├── f6e5d4c3b2a1.xlsx
+        └── 9z8y7x6w5v4u.pdf
+```
+
+### File Naming Convention
+
+Files are stored using the pattern: `{GUID}.{extension}`
+
+- GUID ensures uniqueness
+- Original extension is preserved for type detection
+- Original filename is stored separately in `DocumentName` property
+
+<Note>
+The `App_Data` folder is automatically protected by IIS and cannot be accessed directly via HTTP, providing security for your documents.
+</Note>
+
+## Document Key Generation
+
+The control generates unique document keys for OnlyOffice (`OnlyOfficeEditor.ascx.cs:402-409`):
+
+```csharp
+private static string GenerateDocumentKey(string fileId)
+{
+    if (string.IsNullOrWhiteSpace(fileId))
+        return Guid.NewGuid().ToString("N");
+    var c = fileId.Replace("-", "");
+    if (c.Length < 24) c = c.PadRight(24, '0');
+    return c.Substring(0, 20) + "_" + c.Substring(c.Length - 4);
+}
+```
+
+<Warning>
+The document key must be unique and remain constant for the same document. Changing the key will cause OnlyOffice to treat it as a different document.
+</Warning>
+
+## File Download Handler
+
+The `OnlyOfficeHandler.ashx` handles document downloads for the OnlyOffice server (`OnlyOfficeHandler.ashx.cs:51-69`):
+
+```csharp
+private static void Download(HttpContext context)
+{
+    var fileId = context.Request["fileId"];
+    var uploads = UploadsPath(context);
+    var path = ResolveStoredFile(uploads, fileId);
+    
+    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+    {
+        context.Response.StatusCode = 404;
+        context.Response.Write("File not found");
+        return;
+    }
+
+    var fileName = Path.GetFileName(path);
+    context.Response.Clear();
+    context.Response.ContentType = "application/octet-stream";
+    context.Response.AddHeader("Content-Disposition", "attachment; filename=" + fileName);
+    context.Response.WriteFile(path);
+    context.Response.End();
+}
+```
+
+### File Resolution
+
+Files are resolved using a wildcard pattern (`OnlyOfficeHandler.ashx.cs:43-49`):
+
+```csharp
+private static string ResolveStoredFile(string uploadsDir, string fileId)
+{
+    if (string.IsNullOrWhiteSpace(fileId)) return null;
+    var matches = Directory.GetFiles(uploadsDir, fileId + ".*");
+    if (matches.Length > 0) return matches[0];
+    return null;
+}
+```
+
+## Handling Multiple Uploads
+
+For scenarios with multiple file uploads:
+
+```csharp
+protected void ProcessMultipleFiles()
+{
+    var uploadedFiles = new List<string>();
+    
+    foreach (HttpPostedFile file in Request.Files)
+    {
+        if (file.ContentLength > 0)
+        {
+            byte[] fileData = new byte[file.ContentLength];
+            file.InputStream.Read(fileData, 0, file.ContentLength);
+            
+            // Store file reference
+            var fileId = Guid.NewGuid().ToString("N");
+            var ext = Path.GetExtension(file.FileName);
+            var uploadsDir = Server.MapPath("~/App_Data/uploads");
+            Directory.CreateDirectory(uploadsDir);
+            File.WriteAllBytes(Path.Combine(uploadsDir, fileId + ext), fileData);
+            
+            uploadedFiles.Add(fileId);
+        }
+    }
+    
+    // Load the first file in editor
+    if (uploadedFiles.Count > 0)
+    {
+        docEditor.SetDocumentFromUpload(uploadedFiles[0], "Document 1");
+    }
+}
+```
+
+## Storage Considerations
+
+### Disk Space Management
+
+<Warning>
+The `App_Data/uploads` folder will grow over time. Implement a cleanup strategy:
+
+- Delete temporary files after conversion
+- Archive old documents
+- Set up periodic cleanup jobs
+</Warning>
+
+### Cleanup Example
+
+```csharp
+private void CleanupOldFiles()
+{
+    var uploadsDir = Server.MapPath("~/App_Data/uploads");
+    var files = Directory.GetFiles(uploadsDir);
+    var cutoffDate = DateTime.Now.AddDays(-7);
+    
+    foreach (var file in files)
+    {
+        var fileInfo = new FileInfo(file);
+        if (fileInfo.LastAccessTime < cutoffDate)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch
+            {
+                // Log error
+            }
+        }
+    }
+}
+```
+
+## Supported File Types
+
+The control automatically detects document types based on file extensions (`OnlyOfficeEditor.ascx.cs:411-427`):
+
+| File Type | Extensions | Document Type |
+|-----------|------------|---------------|
+| Spreadsheet | .xls, .xlsx, .ods, .csv | cell |
+| Presentation | .ppt, .pptx, .odp | slide |
+| Document | .doc, .docx, .odt | word |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PDF Conversion" icon="file-pdf" href="/guides/pdf-conversion">
+    Learn how to convert documents to PDF format
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solve common upload and storage issues
+  </Card>
+</CardGroup>

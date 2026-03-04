@@ -1,0 +1,286 @@
+---
+title: JWT Authentication
+description: Secure communication between your application and OnlyOffice Document Server using JSON Web Tokens
+---
+
+## Overview
+
+The OnlyOffice Control library uses JWT (JSON Web Tokens) to authenticate and secure all communication between your ASP.NET application and the OnlyOffice Document Server. This prevents unauthorized access and tampering with document configurations.
+
+## Why JWT Authentication?
+
+JWT authentication provides several critical security benefits:
+
+- **Integrity**: Ensures configuration data hasn't been modified in transit
+- **Authentication**: Verifies requests come from authorized sources
+- **Confidentiality**: Protects sensitive document metadata
+- **Replay Protection**: Prevents malicious reuse of valid tokens
+
+<Warning>
+  JWT authentication is **required** in production OnlyOffice installations. Without it, anyone who can access your OnlyOffice server could open or modify documents.
+</Warning>
+
+## How JWT Works
+
+### Token Structure
+
+The library creates JWT tokens using the HS256 algorithm (HMAC with SHA-256). Each token consists of three parts:
+
+1. **Header**: Specifies the algorithm and token type
+2. **Payload**: Contains the configuration data
+3. **Signature**: Cryptographic signature to verify integrity
+
+```csharp OnlyOfficeJwt.cs:9-25
+public static string Create(string payloadJson, string secret)
+{
+    if (payloadJson == null) payloadJson = "{}";
+    if (string.IsNullOrWhiteSpace(secret)) secret = "secret";
+
+    var headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    var header = Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
+    var payload = Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
+    var unsignedToken = header + "." + payload;
+
+    using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret)))
+    {
+        var signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(unsignedToken));
+        var signature = Base64UrlEncode(signatureBytes);
+        return unsignedToken + "." + signature;
+    }
+}
+```
+
+### Base64 URL Encoding
+
+JWT uses a URL-safe variant of Base64 encoding that:
+- Removes padding (`=` characters)
+- Replaces `+` with `-`
+- Replaces `/` with `_`
+
+This ensures tokens can be safely transmitted in URLs and HTTP headers.
+
+```csharp OnlyOfficeJwt.cs:27-33
+private static string Base64UrlEncode(byte[] bytes)
+{
+    var s = Convert.ToBase64String(bytes);
+    s = s.Split('=')[0];
+    s = s.Replace('+', '-').Replace('/', '_');
+    return s;
+}
+```
+
+## When JWT Tokens Are Created
+
+The library generates JWT tokens in two primary scenarios:
+
+### 1. Editor Configuration
+
+When initializing the OnlyOffice editor, a JWT token is created containing the complete editor configuration:
+
+```csharp OnlyOfficeEditor.ascx.cs:263-295
+private string BuildConfigJson()
+{
+    var ext = Path.GetExtension(DocumentName);
+    var fileType = string.IsNullOrWhiteSpace(ext) ? "" : ext.TrimStart('.');
+
+    var config = new
+    {
+        document = new
+        {
+            fileType,
+            key = DocumentKey,
+            title = DocumentName,
+            url = DocumentUrl
+        },
+        documentType = ResolveDocumentType(fileType),
+        editorConfig = new
+        {
+            callbackUrl = CallbackUrl ?? "",
+            mode = Mode ?? "edit",
+            lang = Lang ?? "es",
+            user = new { id = UserId ?? "1", name = UserDisplayName ?? "Usuario" }
+        }
+    };
+
+    var serializer = new JavaScriptSerializer();
+    var json = serializer.Serialize(config);
+    var token = OnlyOfficeJwt.Create(json, JwtSecret);
+
+    return "{\"token:\" + serializer.Serialize(token)
+        + ",\"document:\" + serializer.Serialize(config.document)
+        + ",\"documentType:\" + serializer.Serialize(config.documentType)
+        + ",\"editorConfig:\" + serializer.Serialize(config.editorConfig)
+        + "}";
+}
+```
+
+<Note>
+  The token includes the entire configuration object, ensuring OnlyOffice can verify that no parameters have been tampered with.
+</Note>
+
+### 2. Document Conversion
+
+When converting documents to PDF, JWT tokens authenticate the conversion request:
+
+```csharp OnlyOfficeEditor.ascx.cs:179-194
+var requestPayload = new Dictionary<string, object>
+{
+    ["async"] = false,
+    ["filetype"] = sourceExt,
+    ["outputtype"] = "pdf",
+    ["url"] = sourceUrl,
+    ["title"] = Path.GetFileName(sourceName),
+    ["key"] = sourceKey
+};
+
+var payloadJson = serializer.Serialize(requestPayload);
+var token = OnlyOfficeJwt.Create(payloadJson, JwtSecret);
+
+requestPayload["token"] = token;
+var body = serializer.Serialize(requestPayload);
+```
+
+The token is also sent in the Authorization header:
+
+```csharp OnlyOfficeEditor.ascx.cs:316
+req.Headers["Authorization"] = "Bearer " + token;
+```
+
+## Configuring JWT Secret
+
+### In Your Application
+
+Set the `JwtSecret` property on the control:
+
+```csharp
+docEditor.JwtSecret = ConfigurationManager.AppSettings["OnlyOfficeJwtSecret"];
+```
+
+```xml Web.config
+<appSettings>
+  <add key="OnlyOfficeJwtSecret" value="your-secure-secret-key" />
+</appSettings>
+```
+
+### In OnlyOffice Document Server
+
+The secret must match in your OnlyOffice server configuration. Edit `/etc/onlyoffice/documentserver/local.json`:
+
+```json
+{
+  "services": {
+    "CoAuthoring": {
+      "secret": {
+        "inbox": {
+          "string": "your-secure-secret-key"
+        },
+        "outbox": {
+          "string": "your-secure-secret-key"
+        }
+      }
+    }
+  }
+}
+```
+
+Restart OnlyOffice services after configuration:
+
+```bash
+sudo supervisorctl restart all
+```
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Requirements:**
+  
+  1. **Never hardcode secrets** in source code
+  2. **Use strong secrets**: Minimum 32 characters, random alphanumeric
+  3. **Different secrets per environment**: Development, staging, and production should each have unique secrets
+  4. **Rotate secrets periodically**: Change secrets every 90 days or after security incidents
+  5. **Secure storage**: Use encrypted configuration files or secret management services
+</Warning>
+
+### Generate Strong Secrets
+
+Use cryptographically secure random generation:
+
+```csharp
+using System.Security.Cryptography;
+
+public static string GenerateSecureSecret(int length = 32)
+{
+    using (var rng = new RNGCryptoServiceProvider())
+    {
+        var bytes = new byte[length];
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes);
+    }
+}
+```
+
+### Environment-Specific Configuration
+
+Use Web.config transformations:
+
+```xml Web.Release.config
+<appSettings>
+  <add key="OnlyOfficeJwtSecret" 
+       value="#{OnlyOfficeJwtSecret}#" 
+       xdt:Transform="SetAttributes" 
+       xdt:Locator="Match(key)" />
+</appSettings>
+```
+
+### Azure Key Vault Integration
+
+For production applications, consider using Azure Key Vault:
+
+```csharp
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
+
+public async Task<string> GetJwtSecretFromKeyVault()
+{
+    var client = new SecretClient(
+        new Uri("https://your-keyvault.vault.azure.net/"),
+        new DefaultAzureCredential());
+    
+    KeyVaultSecret secret = await client.GetSecretAsync("OnlyOfficeJwtSecret");
+    return secret.Value;
+}
+```
+
+## Troubleshooting JWT Issues
+
+### Token Mismatch Errors
+
+If OnlyOffice returns authentication errors:
+
+1. **Verify secret matching**: Ensure both your app and OnlyOffice server use the same secret
+2. **Check character encoding**: Secrets must be UTF-8 encoded
+3. **Review server logs**: Check `/var/log/onlyoffice/documentserver/converter/out.log`
+
+### Invalid Signature
+
+Common causes:
+- Secret mismatch between application and server
+- Whitespace or special characters in configuration files
+- Case sensitivity issues
+
+### Token Expiration
+
+The current implementation does not include expiration claims. For enhanced security, consider adding `exp` (expiration) and `iat` (issued at) claims:
+
+```csharp
+var payload = new
+{
+    config = yourConfigObject,
+    iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+    exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+};
+```
+
+## Related Configuration
+
+See [Configuration Properties](/concepts/configuration) for details on setting the `JwtSecret` property and other security-related configuration options.
